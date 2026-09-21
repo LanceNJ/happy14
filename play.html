@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>欢乐十四分</title>
+  <!--H14-BROWSER-IDENTITY-START-->
+  <meta name="description" content="一副牌、两个人、一局三分钟的小纸牌游戏。点开就能玩，不用下载。" />
+  <meta name="theme-color" content="#16361f" />
+  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMxNjM2MWYiLz48cmVjdCB4PSIxNSIgeT0iMTAuNSIgd2lkdGg9IjM0IiBoZWlnaHQ9IjQzIiByeD0iNSIgZmlsbD0iI2ZiZmFmNCIgc3Ryb2tlPSIjZDliNDVhIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSIzMiIgeT0iNDAuNSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkhlbHZldGljYSxBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9IjIzIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjMTYzNjFmIj4xNDwvdGV4dD48L3N2Zz4=" />
+  <link rel="apple-touch-icon" href="data:image/png;base64,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" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="欢乐十四分" />
+  <!--H14-BROWSER-IDENTITY-END-->
+  <link rel="stylesheet" href="electron/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="title">🎴 欢乐十四分 <span class="sub">凑 14 · 单机版 · 浏览器试玩</span></div>
+      <div class="top-actions">
+        <button id="soundBtn" class="btn btn-warm">🔊 音效开</button>
+        <button id="helpBtn" class="btn btn-warm">❓ 玩法</button>
+        <button id="newGame" class="btn btn-warm">🔄 新游戏</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <main class="board">
+        <!-- 对手区 -->
+        <section class="seat npc">
+          <div class="who">
+            <div id="npcAvatar" class="npc-avatar"></div>
+            <div class="who-text">
+              <div class="who-name">小痞机器人 <span id="npcCount" class="pill">0</span></div>
+              <div id="npcSay" class="npc-say hidden"></div>
+            </div>
+          </div>
+          <div id="npcHand" class="hand backs"></div>
+        </section>
+
+        <!-- 桌面 -->
+        <section class="table-area">
+          <div class="row-label">桌 面 · 上 下 两 行 共 6 张</div>
+          <div id="table" class="card-grid"></div>
+        </section>
+
+        <!-- 补牌堆 + 提示 + 操作 -->
+        <section class="center-info">
+          <div class="pile">🂠 补牌堆 <b id="drawCount">0</b> 张</div>
+          <div id="message" class="message">点击「新游戏」开始</div>
+          <div id="controls" class="controls"></div>
+        </section>
+
+        <!-- 我方区 -->
+        <section class="seat player">
+          <div class="who">
+            <div class="who-name">🧑 你 <span id="playerCount" class="pill">0</span></div>
+          </div>
+          <div id="playerHand" class="hand"></div>
+        </section>
+      </main>
+
+      <aside class="sidebar">
+        <div class="panel">
+          <h3>难 度</h3>
+          <div id="diffSeg" class="diff-seg">
+            <button class="diff-btn" data-diff="easy">容易</button>
+            <button class="diff-btn" data-diff="medium">中等</button>
+            <button class="diff-btn" data-diff="hard">难</button>
+            <button class="diff-btn" data-diff="hell">地狱</button>
+            <button class="diff-btn" data-diff="adaptive">自适应</button>
+          </div>
+          <div id="diffDesc" class="diff-desc"></div>
+        </div>
+        <div class="panel">
+          <h3>比 分</h3>
+          <div class="score-row me"><span>🧑 你</span><b id="scoreMe">0.00</b></div>
+          <div class="score-row npc"><span>🤖 NPC</span><b id="scoreNpc">0.00</b></div>
+          <div id="scoreLead" class="score-lead even">暂时打平</div>
+        </div>
+        <div class="panel">
+          <h3>战 况</h3>
+          <div class="stat"><span>你的战利品</span><b id="pLoot">0</b></div>
+          <div class="stat"><span>NPC 战利品</span><b id="nLoot">0</b></div>
+          <div class="stat muted"><span>你的罚牌</span><b id="pPen">0</b></div>
+          <div class="stat muted"><span>NPC 罚牌</span><b id="nPen">0</b></div>
+        </div>
+        <div class="panel">
+          <h3>胜 率 估 计</h3>
+          <div id="oddsBar" class="odds-bar"></div>
+          <div class="stat"><span>你胜</span><b id="oddsWin">—</b></div>
+          <div class="stat"><span>NPC 胜</span><b id="oddsLose">—</b></div>
+          <div class="stat muted"><span>平局</span><b id="oddsDraw">—</b></div>
+          <div class="stat muted"><span>模拟局数</span><b id="oddsN">—</b></div>
+          <div class="stat"><span>决策质量</span><b id="decisionRate">—</b></div>
+          <div class="odds-note">同水平假设（双方都按贪心打），未知牌按概率重发</div>
+        </div>
+        <div class="panel log-panel">
+          <h3>日 志</h3>
+          <div id="log" class="log"></div>
+        </div>
+        <div class="panel tips">
+          <h3>计 分 小 抄</h3>
+          <div>🂡黑桃=1　💗红桃=0.75</div>
+          <div>♣草花=0.5　♦方片=0.25</div>
+          <div>👑大王=1　🌟小王=0.75</div>
+          <div>配 14 时大小王算 0（随便配）</div>
+        </div>
+      </aside>
+
+      <!-- NPC 出牌亮牌浮层：玩家看清 NPC 每一轮吃了哪些牌 -->
+      <div id="npcShow" class="npc-show hidden"></div>
+
+      <!-- NPC 大娃娃：说重要台词时蹦出来（position:fixed，不占版面） -->
+      <div id="npcSpeak" class="npc-speak hidden">
+        <div id="npcSpeakFace" class="npc-speak-face"></div>
+        <div class="npc-speak-bubble"><div id="npcSpeakText" class="npc-speak-text"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 浮动提示层：匹配得分 / 补牌到账等即时反馈 -->
+  <div id="fx" class="fx"></div>
+
+  <div id="firstBanner" class="first-banner hidden"><span id="firstBannerText">你先手</span></div>
+
+  <div id="helpModal" class="modal hidden">
+    <div class="modal-box">
+      <h2>🤡 怎么玩 · 欢乐十四分</h2>
+      <div class="help-body">
+        <p><b>目标</b>：把牌凑成 14 分收走当战利品，一局结束比谁分高。</p>
+        <p><b>牌怎么计分</b><br>
+        · 花色：🂡黑桃 1 分、💗红桃 0.75、♣草花 0.5、♦方片 0.25<br>
+        · 大小王：👑大王 1 分、🌟小王 0.75；<b>配 14 时大小王算 0</b>（随便配，等于白送一张好牌）<br>
+        · 点数 A=1 … K=13</p>
+        <p><b>怎么打一手（先手随机，轮流）</b><br>
+        ① 点你的手牌 + 点桌面 1 张牌；若加起来 = 14 → 点「✅ 确认匹配」→ 牌飞过去合拢收进战利品。<br>
+        ② 凑不出 14？点「🚫 罚掉选中的 1 张」，丢 1 张（隐藏，扣分）。</p>
+        <p><b>难度（侧栏可切，五档）</b>：容易=大半随机、常送高分牌；中等=一步贪心；难=出牌贪心但补牌不喂你；地狱=每种打法推演到终局；自适应=跟着你的战绩自动升降档，目标把你卡在五五开。每次开局都会先问你一句，勾了"别再问"就跳过。</p>
+        <p><b>收牌之后</b>：你挑 1 张手牌补回桌面（决定给对手留什么），其余自动从补牌堆补满到 4 张。</p>
+        <p><b>NPC（小痞机器人）</b>：每轮都看得见——先指牌、再翻牌、再合牌；重要时刻会蹦出大娃娃说话。</p>
+        <p><b>残局与结算</b>：补牌堆抓完，手牌只减不增，直到双方都打不出、手牌耗尽。得分 = 战利品合计 − 罚牌合计，高者胜。侧栏实时比分牌随时看谁领先，胜率是同水平假设下的赢面估计。</p>
+      </div>
+      <button id="helpClose" class="btn btn-warm btn-big">开始游戏</button>
+    </div>
+  </div>
+
+  <div id="diffModal" class="modal hidden">
+    <div class="modal-box">
+      <h2>🎚 这局打什么难度？</h2>
+      <div id="askDiffSeg" class="diff-seg ask-seg">
+        <button class="diff-btn" data-diff="easy">容易</button>
+        <button class="diff-btn" data-diff="medium">中等</button>
+        <button class="diff-btn" data-diff="hard">难</button>
+        <button class="diff-btn" data-diff="hell">地狱</button>
+        <button class="diff-btn" data-diff="adaptive">自适应</button>
+      </div>
+      <div id="askDiffDesc" class="diff-desc"></div>
+      <label class="ask-never"><input type="checkbox" id="askDiffNever"> 以后开局别再问我</label>
+      <button id="askDiffGo" class="btn btn-warm btn-big">开 始</button>
+    </div>
+  </div>
+
+  <div id="overModal" class="modal hidden">
+    <div class="modal-box">
+      <h2 id="overTitle">游戏结束</h2>
+      <div id="overBody"></div>
+      <button id="overNew" class="btn btn-warm btn-big">再来一局</button>
+    </div>
+  </div>
+
+  <!-- 浏览器下没有 require：每个模块前先给一个假的 module，让模块把导出挂上去，再转成全局 -->
+  <script>var module = { exports: {} };</script>
+  <script src="electron/src/game-core.js"></script>
+  <script>window.G = module.exports;</script>
+
+  <script>module = { exports: {} };</script>
+  <script src="electron/src/advisor.js"></script>
+  <script>window.ADVISOR = module.exports;</script>
+
+  <script>module = { exports: {} };</script>
+  <script src="electron/src/sfx.js"></script>
+  <script>window.SFX = module.exports;</script>
+
+  <script src="electron/src/app.js"></script>
+</body>
+</html>

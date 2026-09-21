@@ -1,0 +1,247 @@
+<view class="app">
+  <view class="topbar">
+    <view class="title">🤡 欢乐十四分 <text class="sub">凑14·单机版</text></view>
+    <view class="top-actions">
+      <view class="btn btn-warm" bindtap="toggleSound">{{soundLabel}}</view>
+      <view class="btn btn-warm" bindtap="showHelp">❓ 玩法</view>
+      <view class="btn btn-warm" bindtap="requestNewGame">🔄 新游戏</view>
+    </view>
+  </view>
+
+  <view class="table-area">
+    <view class="row-label">桌面（上下两行，共6张）</view>
+    <view class="card-grid">
+      <view wx:for="{{table}}" wx:key="id"
+            class="card {{item.red?'red':''}} {{item.isJoker?'joker':''}} {{item.selected?'selected':''}} {{item.isNew?'drop-in':''}} {{item.ringed?'ringed':''}} {{item.ringBad?'ring-bad':''}} {{item.npcPoint?'npc-point':''}} {{item.lifted?'lifted':''}} {{item.dimmed?'dimmed':''}} {{item.ringLock?'ring-lock':''}} {{item.mergeTarget?'merge-target':''}}"
+            bindtap="onTableTap" data-id="{{item.id}}">
+        <view class="corner">{{item.isJoker ? item.label : item.short}}</view>
+        <view class="center">{{item.suitSymbol}}</view>
+        <!-- NPC 回合第 1 拍：卡通箭头指着它要吃的那张桌面牌 -->
+        <view wx:if="{{item.npcPoint}}" class="npc-arrow"></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="seat npc">
+    <view class="who">
+      <!-- NPC 卡通形象：歪戴反扣棒球帽的小痞机器人，表情随 mood 变（纯 WXSS 画，不用图片素材） -->
+      <view class="npc-face mood-{{npcMood}}">
+        <view class="halo"></view>
+        <view class="ant"></view>
+        <view class="ear l"></view>
+        <view class="ear r"></view>
+        <view class="head">
+          <view class="cap"></view>
+          <view class="brim"></view>
+          <view class="blush l"></view>
+          <view class="blush r"></view>
+          <view class="brow l"></view>
+          <view class="brow r"></view>
+          <view class="eye l"></view>
+          <view class="eye r"></view>
+          <view class="mouth"></view>
+          <view class="extra">
+            <view class="toothpick"></view>
+            <view class="tear"></view>
+            <view class="drool"></view>
+          </view>
+        </view>
+      </view>
+      <view class="who-text">
+        <view class="who-name">🤖 小痞机器人 <text class="pill">{{npcCount}}</text></view>
+        <view wx:if="{{npcSay}}" class="npc-say">{{npcSay}}</view>
+      </view>
+    </view>
+    <view class="hand">
+      <view wx:for="{{npcHand}}" wx:key="idx" class="card back {{item.isNew?'fade-in':''}}"><view class="back-emoji">🂠</view></view>
+    </view>
+  </view>
+
+  <view class="center-info">
+    <view class="pile">🂠 补牌堆：<text class="b {{drawPulse?'pulse':''}}">{{drawCount}}</text> 张</view>
+    <view class="message">{{message}}</view>
+    <view class="controls">
+      <view wx:if="{{showConfirm}}" class="btn btn-go {{confirmDisabled?'btn-disabled':''}}" bindtap="confirmMatch">{{confirmLabel}}</view>
+      <view wx:if="{{showConfirm}}" class="btn btn-warn {{penDisabled?'btn-disabled':''}}" bindtap="doPenalty">{{penLabel}}</view>
+    </view>
+  </view>
+
+  <view class="seat player">
+    <view class="who">🧑 你 <text class="pill">{{playerCount}}</text></view>
+    <view class="hand">
+      <view wx:for="{{playerHand}}" wx:key="id"
+            class="card {{item.red?'red':''}} {{item.isJoker?'joker':''}} {{item.selected?'selected':''}} {{item.isNew?'pop-in':''}} {{item.mergeTo?'merge-to':''}} {{item.penOut?'penalty-out':''}}"
+            bindtap="onHandTap" data-id="{{item.id}}">
+        <view class="corner">{{item.isJoker ? item.label : item.short}}</view>
+        <view class="center">{{item.suitSymbol}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="sidebar">
+    <view class="panel">
+      <view class="h3">难 度</view>
+      <view class="diff-seg">
+        <view class="diff-btn {{npcDifficulty==='easy'?'on':''}}" bindtap="setDifficulty" data-diff="easy">容易</view>
+        <view class="diff-btn {{npcDifficulty==='medium'?'on':''}}" bindtap="setDifficulty" data-diff="medium">中等</view>
+        <view class="diff-btn {{npcDifficulty==='hard'?'on':''}}" bindtap="setDifficulty" data-diff="hard">难</view>
+        <view class="diff-btn {{npcDifficulty==='hell'?'on':''}}" bindtap="setDifficulty" data-diff="hell">地狱</view>
+        <view class="diff-btn diff-wide {{npcDifficulty==='adaptive'?'on':''}}" bindtap="setDifficulty" data-diff="adaptive">自适应</view>
+      </view>
+      <view class="diff-desc">{{diffDesc}}</view>
+    </view>
+    <view class="panel">
+      <view class="h3">比 分</view>
+      <view class="score-row me"><text>🧑 你</text><text class="b {{scorePulse=='me'?'pulse':''}}">{{scoreMe}}</text></view>
+      <view class="score-row npc"><text>🤖 NPC</text><text class="b {{scorePulse=='npc'?'pulse':''}}">{{scoreNpc}}</text></view>
+      <view class="score-lead {{scoreLeadCls}}">{{scoreLead}}</view>
+    </view>
+    <view class="panel">
+      <view class="h3">战 况</view>
+      <view class="stat"><text>你的战利品</text><text class="b {{lootPulse=='pLoot'?'pulse':''}}">{{pLoot}}</text></view>
+      <view class="stat"><text>NPC战利品</text><text class="b {{lootPulse=='nLoot'?'pulse':''}}">{{nLoot}}</text></view>
+      <view class="stat muted"><text>你的罚牌</text><text class="b {{lootPulse=='pPen'?'pulse':''}}">{{pPen}}</text></view>
+      <view class="stat muted"><text>NPC罚牌</text><text class="b {{lootPulse=='nPen'?'pulse':''}}">{{nPen}}</text></view>
+    </view>
+    <view class="panel">
+      <view class="h3">胜 率 估 计</view>
+      <view class="odds-bar">
+        <view class="odds-me" style="width:{{oddsMeW}}"></view>
+        <view class="odds-draw" style="width:{{oddsDrawW}}"></view>
+        <view class="odds-npc" style="width:{{oddsNpcW}}"></view>
+      </view>
+      <view class="stat"><text>你胜</text><text class="b">{{oddsWin}}</text></view>
+      <view class="stat"><text>NPC胜</text><text class="b">{{oddsLose}}</text></view>
+      <view class="stat muted"><text>平局</text><text>{{oddsDraw}}</text></view>
+      <view class="stat muted"><text>模拟局数</text><text>{{oddsN}}</text></view>
+      <view class="stat"><text>决策质量</text><text class="b">{{decisionRate}}</text></view>
+      <view class="odds-note">同水平假设（双方都按贪心打），未知牌按概率重发</view>
+    </view>
+    <view class="panel">
+      <view class="h3">日志</view>
+      <view class="log">{{logText}}</view>
+    </view>
+    <view class="panel tips">
+      <view class="h3">计分小抄</view>
+      <view>🂡黑桃=1　💗红桃=.75</view>
+      <view>♣草花=.5　♦方片=.25</view>
+      <view>👑大王=1　🌟小王=.75</view>
+      <view>配14时大小王算0</view>
+    </view>
+  </view>
+
+  <!-- NPC 出牌亮牌浮层：整屏压暗 → 一张张翻牌 → 亮等式 → 合牌收走 -->
+  <view wx:if="{{npcShow}}" class="npc-show {{npcShow.masked?'masked':''}} {{npcShow.clearing?'merging':''}}">
+    <view class="npc-show-box">
+      <view class="npc-show-head">{{npcShow.head}}</view>
+      <view class="npc-show-cards">
+        <block wx:for="{{npcShow.cards}}" wx:key="id">
+          <view class="card {{item.red?'red':''}} {{item.isJoker?'joker':''}} {{item.flipIn?'flip-in':''}} {{item.revealed?'revealed':''}} {{item.isTarget?'is-target':''}}"
+                style="animation-delay:{{item.delay}}ms">
+            <view class="corner">{{item.isJoker ? item.label : item.short}}</view>
+            <view class="center">{{item.suitSymbol}}</view>
+          </view>
+          <view wx:if="{{index < npcShow.cards.length - 1}}" class="plus">+</view>
+        </block>
+      </view>
+      <view wx:if="{{npcShow.eq}}" class="npc-show-eq">{{npcShow.eq}}</view>
+      <view wx:else class="npc-show-eq pending">?</view>
+    </view>
+  </view>
+
+  <!-- NPC 大娃娃：说重要台词时蹦出来一个放大的卡通头像 + 对话气泡 -->
+  <view wx:if="{{npcSpeak}}" class="npc-speak">
+    <view class="npc-speak-face">
+      <view class="npc-face mood-{{npcSpeak.mood}}">
+        <view class="halo"></view>
+        <view class="ant"></view>
+        <view class="ear l"></view>
+        <view class="ear r"></view>
+        <view class="head">
+          <view class="cap"></view>
+          <view class="brim"></view>
+          <view class="blush l"></view>
+          <view class="blush r"></view>
+          <view class="brow l"></view>
+          <view class="brow r"></view>
+          <view class="eye l"></view>
+          <view class="eye r"></view>
+          <view class="mouth"></view>
+          <view class="extra">
+            <view class="toothpick"></view>
+            <view class="tear"></view>
+            <view class="drool"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view class="npc-speak-bubble">{{npcSpeak.text}}</view>
+  </view>
+
+  <view wx:if="{{firstBanner}}" class="first-banner"><view class="first-banner-txt">{{firstBanner}}</view></view>
+
+  <view wx:if="{{showOver}}" class="modal">
+    <view class="modal-box">
+      <view class="h2">本局结束</view>
+      <view class="winner">{{over.winner}}</view>
+      <view class="over-score">{{over.p}}　|　{{over.n}}</view>
+      <view wx:if="{{over.say}}" class="over-say">{{over.say}}</view>
+      <view wx:if="{{over.rate}}" class="over-rate">{{over.rate}}</view>
+      <view wx:if="{{over.adapt}}" class="over-rate">{{over.adapt}}</view>
+
+      <!-- 算分过程：按花色/王摊开张数与得分 -->
+      <view class="score-side {{sec.cls}}" wx:for="{{over.sections}}" wx:for-item="sec" wx:key="title">
+        <view class="score-title">{{sec.title}}</view>
+        <view class="score-row head"><text>项目</text><text>张数 × 单价</text><text>得分</text></view>
+        <view class="score-row {{r.zero?'zero':''}}" wx:for="{{sec.lootRows}}" wx:for-item="r" wx:key="k">
+          <text>{{r.name}}</text><text>{{r.calc}}</text><text class="plus">{{r.points}}</text>
+        </view>
+        <view class="score-row sum"><text>战利品合计</text><text></text><text class="plus">{{sec.lootTotal}}</text></view>
+        <view class="score-row head"><text>罚牌</text><text>张数 × 单价</text><text>得分</text></view>
+        <view class="score-row {{r.zero?'zero':''}}" wx:for="{{sec.penRows}}" wx:for-item="r" wx:key="k">
+          <text>{{r.name}}</text><text>{{r.calc}}</text><text class="minus">{{r.points}}</text>
+        </view>
+        <view class="score-row sum"><text>罚牌合计</text><text></text><text class="minus">{{sec.penTotal}}</text></view>
+        <view class="score-row final"><text>得分</text><text>{{sec.calc}}</text><text class="score">{{sec.score}}</text></view>
+      </view>
+
+      <view class="all-cards">{{over.allCards}}</view>
+      <view class="btn btn-warm btn-big" bindtap="requestNewGame">再来一局</view>
+    </view>
+  </view>
+
+  <!-- 开局难度询问（用户要求：新开局先问一句）。选档只是选中，点「开始」才生效。 -->
+  <view wx:if="{{showDiffAsk}}" class="modal">
+    <view class="modal-box">
+      <view class="h2">🎚 这局打什么难度？</view>
+      <view class="diff-seg ask-seg">
+        <view class="diff-btn {{askDiffPending==='easy'?'on':''}}" bindtap="pickAskDiff" data-diff="easy">容易</view>
+        <view class="diff-btn {{askDiffPending==='medium'?'on':''}}" bindtap="pickAskDiff" data-diff="medium">中等</view>
+        <view class="diff-btn {{askDiffPending==='hard'?'on':''}}" bindtap="pickAskDiff" data-diff="hard">难</view>
+        <view class="diff-btn {{askDiffPending==='hell'?'on':''}}" bindtap="pickAskDiff" data-diff="hell">地狱</view>
+        <view class="diff-btn diff-wide {{askDiffPending==='adaptive'?'on':''}}" bindtap="pickAskDiff" data-diff="adaptive">自适应</view>
+      </view>
+      <view class="diff-desc">{{askDiffDesc}}</view>
+      <view class="ask-never" bindtap="toggleAskNever">
+        <text class="ask-box">{{askNever ? '☑' : '☐'}}</text> 以后开局别再问我
+      </view>
+      <view class="btn btn-warm btn-big" bindtap="confirmDiffAsk">{{askDiffGo}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{showHelp}}" class="modal">
+    <view class="modal-box">
+      <view class="h2">🤡 怎么玩 · 欢乐十四分</view>
+      <scroll-view scroll-y class="help-body">
+        <view class="help-sec"><text class="help-b">目标</text>：把牌凑成 14 分收走当战利品，一局结束比谁分高。</view>
+        <view class="help-sec"><text class="help-b">牌怎么计分</text>：花色 🂡黑桃1分、💗红桃0.75、♣草花0.5、♦方片0.25；大小王 👑大王1分、🌟小王0.75；配14时大小王算0（随便配，等于白送一张好牌）；点数 A=1…K=13。</view>
+        <view class="help-sec"><text class="help-b">怎么打一手（先手随机，轮流）</text>：① 点你的手牌 + 点桌面1张牌，若加起来=14 → 点「✅ 确认匹配」→ 牌飞过去合拢收进战利品。② 凑不出14？点「🚫 罚掉选中的1张」，丢1张（隐藏，扣分）。</view>
+        <view class="help-sec"><text class="help-b">难度（侧栏可切，五档）</text>：容易=大半随机、常送高分牌；中等=一步贪心；难=出牌贪心但补牌不喂你；地狱=每种打法推演到终局；自适应=跟着你的战绩自动升降档，目标把你卡在五五开。每次开局都会先问你一句，勾了"别再问"就跳过。</view>
+        <view class="help-sec"><text class="help-b">收牌之后</text>：你挑1张手牌补回桌面（决定给对手留什么），其余自动从补牌堆补满到4张。</view>
+        <view class="help-sec"><text class="help-b">NPC（小痞机器人）</text>：每轮都看得见——先指牌、再翻牌、再合牌；重要时刻会蹦出大娃娃说话。</view>
+        <view class="help-sec"><text class="help-b">残局与结算</text>：补牌堆抓完，手牌只减不增，直到双方都打不出、手牌耗尽。得分 = 战利品合计 − 罚牌合计，高者胜。侧栏实时比分牌随时看谁领先，胜率是同水平假设下的赢面估计。</view>
+      </scroll-view>
+      <view class="btn btn-warm btn-big" bindtap="hideHelp">开始游戏</view>
+    </view>
+  </view>
+</view>

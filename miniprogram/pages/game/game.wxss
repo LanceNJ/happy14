@@ -1,0 +1,508 @@
+/* ===== 欢乐十四分 · 小程序（卡通赌桌风）
+   色板与 Web 版一一对应：深木外框 → 绿呢桌面 → 奶油纸张面板 → 金边
+   这里刻意不写 var()：小程序端无法在本机实测，万一渲染器对自定义属性支持有差异，
+   整套配色会一起塌掉。同一套色值直接写死，效果一致且零风险。
+   木 #7d5230/#4a2d15　呢 #2f7a52/#164d2c　纸 #fdf6e6/#fffdf7
+   墨 #33281a/#7d6a52　金 #ffcf4d/#c9901f　我 #e8557f　敌 #4f74d8
+   ===== */
+
+page {
+  background:
+    repeating-linear-gradient(92deg, rgba(0,0,0,0.055) 0 3rpx, transparent 3rpx 12rpx),
+    radial-gradient(circle at 16% 6%, #a86c40 0%, transparent 42%),
+    radial-gradient(circle at 88% 96%, #8b5730 0%, transparent 46%),
+    linear-gradient(158deg, #7d5230 0%, #4a2d15 100%);
+}
+
+.app { min-height: 100vh; padding: 16rpx 20rpx; display: flex; flex-direction: column; gap: 12rpx; }
+
+/* 顶栏：深木条 + 金边 */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(180deg, #64401f, #3a2410);
+  border: 6rpx solid #ffcf4d; border-radius: 28rpx;
+  box-shadow: 0 14rpx 0 rgba(0,0,0,0.34), inset 0 2rpx 0 rgba(255,255,255,0.16);
+  padding: 16rpx 26rpx;
+}
+.title { font-size: 40rpx; font-weight: 900; color: #ffcf4d; letter-spacing: 2rpx; text-shadow: 0 4rpx 0 rgba(0,0,0,0.45); }
+.title .sub { font-size: 22rpx; font-weight: 700; color: #f2dcb4; opacity: 0.85; margin-left: 10rpx; text-shadow: none; }
+.top-actions { display: flex; gap: 12rpx; align-items: center; }
+
+.btn { border: none; border-radius: 22rpx; padding: 14rpx 26rpx; font-size: 28rpx; font-weight: 900;
+  color: #3a2a12; box-shadow: 0 8rpx 0 rgba(0,0,0,0.32), inset 0 2rpx 0 rgba(255,255,255,0.55); }
+.btn-warm { background: linear-gradient(180deg, #ffd86b, #f7ac2e); }
+.btn-go { background: linear-gradient(180deg, #9be8b0, #3fbf6b); }
+.btn-warn { background: linear-gradient(180deg, #ffb07c, #ff7a45); }
+.btn-disabled { opacity: 0.42; }
+
+/* 桌面：绿呢 + 金边 */
+.table-area {
+  background:
+    radial-gradient(circle at 28% 12%, rgba(255,255,255,0.10), transparent 62%),
+    linear-gradient(170deg, #2f7a52, #164d2c);
+  border: 6rpx solid #ffcf4d; border-radius: 32rpx; padding: 18rpx 20rpx;
+  box-shadow: inset 0 0 80rpx rgba(0,0,0,0.34), 0 14rpx 0 #0d3520;
+}
+.row-label { color: #cdf0dc; font-weight: 900; font-size: 24rpx; letter-spacing: 4rpx; text-align: center;
+  margin-bottom: 14rpx; text-shadow: 0 2rpx 0 rgba(0,0,0,0.45); }
+.card-grid { display: flex; flex-wrap: wrap; gap: 16rpx; justify-content: center; }
+
+/* 座位：奶油纸张 + 左侧色条（一眼分清敌我） */
+.seat {
+  position: relative;
+  background: linear-gradient(180deg, #fffdf7, #fdf6e6);
+  border: 6rpx solid #fff; border-radius: 28rpx;
+  padding: 14rpx 20rpx 14rpx 30rpx; box-shadow: 0 10rpx 0 rgba(0,0,0,0.26);
+  margin-bottom: 12rpx;
+}
+.seat::before {
+  content: ''; position: absolute; left: 12rpx; top: 20rpx; bottom: 20rpx; width: 10rpx;
+  border-radius: 999rpx; background: #4f74d8;
+}
+.seat.player::before { background: #e8557f; }
+.seat.npc { background: linear-gradient(180deg, #f3f8ff, #e6efff); }
+.seat.player { background: linear-gradient(180deg, #fff8fb, #ffedf3); }
+.who { font-weight: 900; font-size: 26rpx; margin-bottom: 10rpx; display: flex; align-items: flex-start; gap: 10rpx; }
+.pill { background: #ffcf4d; color: #4a3410; border-radius: 999rpx; padding: 2rpx 16rpx; font-size: 22rpx;
+  font-weight: 900; box-shadow: 0 4rpx 0 #c9901f; }
+
+.hand { display: flex; gap: 14rpx; flex-wrap: wrap; min-height: 150rpx; align-items: center; }
+.hand.backs { opacity: 0.95; }
+
+.card {
+  width: 104rpx; height: 148rpx; border-radius: 18rpx;
+  background: linear-gradient(172deg, #fff, #f7f2e7);
+  border: 5rpx solid #2b2b2b; box-shadow: 0 10rpx 0 rgba(0,0,0,0.34);
+  position: relative; display: flex; flex-direction: column; justify-content: space-between;
+  padding: 8rpx 10rpx;
+}
+.card.red { color: #d92b2b; }
+.card:not(.red) { color: #222; }
+.card .corner { font-size: 28rpx; font-weight: 900; line-height: 1.1; }
+.card .center { font-size: 52rpx; text-align: center; flex: 1; display: flex; align-items: center; justify-content: center; }
+.card.selected { outline: 6rpx solid #ffcf4d; outline-offset: 3rpx; transform: translateY(-12rpx);
+  box-shadow: 0 22rpx 0 rgba(0,0,0,0.3), 0 0 40rpx #ffcf4d; }
+/* 牌背：深蓝金斜纹，像副真扑克 */
+.card.back {
+  background:
+    repeating-linear-gradient(45deg, rgba(255,207,77,0.28) 0 8rpx, transparent 8rpx 22rpx),
+    linear-gradient(160deg, #5b83e4, #2b4599);
+  border-color: #fff;
+  box-shadow: 0 10rpx 0 rgba(0,0,0,0.3), inset 0 0 0 4rpx rgba(255,255,255,0.5);
+}
+.card.back .back-emoji { font-size: 52rpx; text-align: center; line-height: 132rpx; color: #ffe9b0; opacity: 0.9; }
+.card.joker { background: linear-gradient(160deg, #fff6d3, #ffd86b); border-color: #b8790a; }
+.card.joker .center { font-size: 44rpx; }
+
+/* 中央信息：压在绿呢上的深色条 */
+.center-info {
+  background: linear-gradient(170deg, rgba(22,77,44,0.94), rgba(12,48,28,0.96));
+  border: 6rpx solid rgba(255,207,77,0.5); border-radius: 28rpx;
+  padding: 16rpx 22rpx; text-align: center; margin-bottom: 12rpx;
+  box-shadow: 0 10rpx 0 rgba(0,0,0,0.28);
+}
+.pile { font-weight: 900; font-size: 26rpx; color: #d3f2e0; }
+.pile .b { color: #ffcf4d; font-size: 34rpx; }
+.message { margin: 12rpx 0; font-weight: 800; font-size: 25rpx; min-height: 34rpx; color: #fff; }
+.controls { display: flex; gap: 14rpx; justify-content: center; min-height: 60rpx; align-items: center; }
+
+/* 侧栏面板：奶油纸张 + 金色标题横条（整列看起来有骨架） */
+.sidebar { display: flex; flex-direction: column; gap: 12rpx; }
+.panel {
+  background: linear-gradient(180deg, #fffdf7, #fdf6e6);
+  border: 6rpx solid #fff; border-radius: 28rpx;
+  padding: 0 18rpx 14rpx; box-shadow: 0 10rpx 0 rgba(0,0,0,0.26);
+}
+.h3 {
+  font-size: 24rpx; font-weight: 900; letter-spacing: 2rpx; color: #4a3410;
+  background: linear-gradient(180deg, #ffcf4d, #f0b93a);
+  margin: 0 -18rpx 12rpx; padding: 10rpx 18rpx 11rpx;
+  border-radius: 22rpx 22rpx 0 0;
+}
+.stat { display: flex; justify-content: space-between; font-size: 24rpx; margin: 6rpx 0; font-weight: 700; color: #33281a; }
+.stat .b { color: #33281a; font-weight: 900; }
+.stat.muted { opacity: 0.62; }
+.log {
+  font-size: 22rpx; line-height: 1.6; white-space: pre-wrap; max-height: 280rpx; overflow: auto;
+  color: #4a3c28; background: rgba(255,255,255,0.55); border-radius: 16rpx; padding: 8rpx 12rpx;
+}
+.tips { font-size: 22rpx; line-height: 1.9; font-weight: 700; color: #7d6a52; }
+
+/* 难度选择：四档分段按钮（仅影响 NPC 强度；玩家永远是"人"）。
+   直接写死与 Web 版同一套色值（小程序不写 var()），不引入新色，免得 style-check 死变量报错。 */
+.diff-seg { display: flex; flex-wrap: wrap; gap: 12rpx; margin: 8rpx 0 4rpx; }
+.diff-btn {
+  flex: 1 1 0; min-width: 0; text-align: center;
+  font-weight: 900; font-size: 26rpx; line-height: 1.2;
+  padding: 12rpx 0; border-radius: 16rpx;
+  border: 4rpx solid #fff; background: linear-gradient(180deg, #fff, #f3ecdd);
+  color: #7d6a52; box-shadow: 0 6rpx 0 rgba(0,0,0,0.18);
+}
+.diff-btn.on {
+  background: linear-gradient(180deg, #ffd86b, #f7ac2e); color: #4a3410;
+  border-color: #c9901f; box-shadow: 0 6rpx 0 #c9901f;
+}
+.diff-desc { font-size: 22rpx; font-weight: 700; color: #7d6a52; line-height: 1.4; min-height: 2.4em; }
+/* 第 5 档「自适应」独占一行：它不是"固定强度的第五级"，而是会自己变的东西 */
+.diff-wide { flex: 1 1 100%; }
+/* 开局难度询问层：这是要一眼看懂再点一下的地方，按钮放大；底部一个"别再问" */
+.ask-seg { margin-bottom: 16rpx; }
+.ask-seg .diff-btn { font-size: 30rpx; padding: 18rpx 4rpx; }
+.ask-never { font-size: 24rpx; font-weight: 800; color: #7d6a52; margin: 18rpx 0 20rpx; }
+.ask-box { font-size: 30rpx; margin-right: 8rpx; }
+
+/* 比分牌：整局最该一眼看到的信息 */
+.score-row.me, .score-row.npc {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 6rpx 0; font-weight: 900; font-size: 28rpx;
+}
+.score-row.me text, .score-row.npc text { flex: 1; }
+.score-row.me text.b, .score-row.npc text.b {
+  flex: 0 0 auto; text-align: right; font-size: 40rpx; letter-spacing: 1rpx;
+}
+.score-row.me text.b { color: #e8557f; }
+.score-row.npc text.b { color: #4f74d8; }
+.score-row.me text.b.pulse, .score-row.npc text.b.pulse { display: inline-block; animation: statPop 0.75s ease; }
+.score-lead {
+  margin-top: 10rpx; text-align: center; font-size: 23rpx; font-weight: 900;
+  padding: 7rpx 0; border-radius: 999rpx; letter-spacing: 1rpx;
+}
+.score-lead.me { background: rgba(232,85,127,0.14); color: #b82b5b; }
+.score-lead.npc { background: rgba(79,116,216,0.14); color: #2f4fa8; }
+.score-lead.even { background: rgba(0,0,0,0.06); color: #7d6a52; }
+
+
+/* ===== 动作：补牌/落桌的入场动画（配合 game.js 的 isNew / drawPulse） ===== */
+@keyframes popIn {
+  0%   { opacity: 0; transform: translateY(46rpx) scale(0.55) rotate(-10deg); }
+  70%  { opacity: 1; transform: translateY(-6rpx) scale(1.08) rotate(3deg); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+@keyframes dropIn {
+  0%   { opacity: 0; transform: translateY(-42rpx) scale(0.7) rotate(8deg); }
+  70%  { opacity: 1; transform: translateY(6rpx) scale(1.06) rotate(-2deg); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+@keyframes fadeIn {
+  0%   { opacity: 0; transform: translateY(-26rpx) scale(0.8); }
+  100% { opacity: 0.95; transform: translateY(0) scale(1); }
+}
+@keyframes numPulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.6); color: #e23b3b; }
+  100% { transform: scale(1); }
+}
+.card.pop-in  { animation: popIn  0.42s cubic-bezier(.2,.9,.3,1.5); }
+.card.drop-in { animation: dropIn 0.42s cubic-bezier(.2,.9,.3,1.5); }
+.card.fade-in { animation: fadeIn 0.40s ease; }
+.pile .b.pulse { display: inline-block; animation: numPulse 0.8s ease; }
+
+/* ===== 匹配的"线性动作"：圈住 → 手牌飞过去合拢 → 收进战利品 ===== */
+/* 圈选：金色虚线框把桌面那张牌圈起来 */
+@keyframes ringPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.7; }
+}
+.card.ringed { position: relative; outline: none; } /* 圈框代替描边，避免两道金边叠着很乱 */
+.card.ringed::after {
+  content: ''; position: absolute; top: -12rpx; left: -12rpx; right: -12rpx; bottom: -12rpx;
+  border: 6rpx dashed #ffcf4d; border-radius: 24rpx; pointer-events: none;
+  animation: ringPulse 1.1s ease-in-out infinite;
+}
+.card.ringed.ring-bad::after { border-color: #ff8a5c; }
+/* NPC 回合第 1 拍：粉色实线圈 + 一支上下浮动的卡通箭头，先"指一指"它要吃哪张 */
+.card.npc-point { z-index: 14; }
+.card.npc-point::after { border-color: #ffb3c6; border-style: solid; border-width: 8rpx; }
+/* 第 2 拍：那张牌"抬起来"——我要的就是它 */
+.card.lifted {
+  transform: translateY(-22rpx) scale(1.1);
+  box-shadow: 0 18rpx 0 rgba(0,0,0,0.22), 0 0 34rpx #ffd86b;
+  z-index: 16;
+  transition: transform 0.4s cubic-bezier(.2,.9,.3,1.4), box-shadow 0.4s ease-out;
+}
+/* NPC 回合：不是它要的那几张压暗，视线只跟着箭头走 */
+.card.dimmed { opacity: 0.34; filter: grayscale(0.7); transition: opacity 0.3s ease-out; }
+.npc-arrow {
+  position: absolute; left: 50%; bottom: -60rpx; margin-left: -26rpx;
+  width: 0; height: 0;
+  border-left: 26rpx solid transparent; border-right: 26rpx solid transparent;
+  border-bottom: 40rpx solid #ffb3c6;
+  pointer-events: none; z-index: 15;
+  animation: arrowBob 0.6s ease-in-out infinite alternate;
+}
+@keyframes arrowBob {
+  from { transform: translateY(12rpx); }
+  to   { transform: translateY(-12rpx); }
+}
+/* 锁定：圈框变实、牌抬起来 */
+.card.ring-lock { transform: translateY(-16rpx) scale(1.05); box-shadow: 0 14rpx 0 rgba(0,0,0,0.22), 0 0 28rpx #ffcf4d; }
+.card.ring-lock::after { border-style: solid; }
+/* 合牌：手牌朝被圈的那张牌飞过去（小程序拿不到实时布局，用固定位移表达"飞向桌面"） */
+@keyframes mergeTo {
+  0%   { transform: translateY(0) scale(1.06); opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translateY(-360rpx) scale(0.62) rotate(-8deg); opacity: 0.2; }
+}
+.card.merge-to { animation: mergeTo 0.64s cubic-bezier(.5,0,.2,1) forwards; z-index: 8; }
+/* 被圈的那张：手牌合上来时胀一下 */
+@keyframes mergeTarget {
+  0%   { transform: scale(1); }
+  55%  { transform: scale(1.18); box-shadow: 0 0 0 10rpx #ffcf4d, 0 0 40rpx #ffcf4d; }
+  100% { transform: scale(1.08); box-shadow: 0 0 0 10rpx #ffcf4d, 0 0 40rpx #ffcf4d; }
+}
+.card.merge-target { animation: mergeTarget 0.64s ease forwards; z-index: 9; }
+.card.merge-target::after { border-style: solid; }
+/* 罚牌：被弃的牌朝下飞走（隐藏） */
+@keyframes penaltyOut {
+  0%   { transform: translateY(0) scale(1.05); opacity: 1; }
+  100% { transform: translate(-60rpx, 120rpx) scale(0.55) rotate(22deg); opacity: 0; }
+}
+.card.penalty-out { animation: penaltyOut 0.42s ease-in forwards; z-index: 8; }
+@keyframes statPop { 0% { transform: scale(1); } 45% { transform: scale(1.45); color: #e23b3b; } 100% { transform: scale(1); } }
+.stat .b.pulse { display: inline-block; animation: statPop 0.7s ease; }
+
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 99; }
+/* 开局先手宣告：大字弹出，1.6 秒自动淡出（game.js announceFirst 控制） */
+.first-banner { position: fixed; left: 0; right: 0; top: 30%; display: flex; justify-content: center; z-index: 70; pointer-events: none; }
+.first-banner-txt {
+  font-size: 72rpx; font-weight: 900; color: #4a3410;
+  background: linear-gradient(180deg, #ffe9a8, #f7c94b); border: 8rpx solid #fff; border-radius: 32rpx;
+  padding: 16rpx 56rpx; box-shadow: 0 14rpx 0 rgba(0,0,0,0.22);
+  animation: firstPop 1.6s cubic-bezier(.2,.9,.3,1.2) forwards;
+}
+@keyframes firstPop {
+  0% { opacity: 0; transform: scale(0.5); }
+  14% { opacity: 1; transform: scale(1.08); }
+  24% { transform: scale(1); }
+  75% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1) translateY(-36rpx); }
+}
+.modal-box { background: linear-gradient(160deg, #fff, #fff3d6); border: 10rpx solid #fff; border-radius: 36rpx;
+  box-shadow: 0 18rpx 0 rgba(0,0,0,0.25); padding: 36rpx 44rpx; text-align: center; min-width: 520rpx; }
+.h2 { font-size: 44rpx; margin-bottom: 20rpx; font-weight: 900; }
+.help-body { height: 56vh; text-align: left; font-size: 24rpx; line-height: 1.65; padding: 4rpx 8rpx; white-space: normal; }
+.help-sec { margin-bottom: 16rpx; }
+.help-b { color: #b8641a; font-weight: 800; }
+.winner { font-size: 52rpx; font-weight: 900; margin: 20rpx 0; color: #ff8a5c; }
+.btn-big { font-size: 32rpx; padding: 20rpx 40rpx; display: inline-block; margin-top: 10rpx; }
+
+/* NPC 出牌亮牌浮层：让玩家看清每一轮 NPC 吃了哪些牌 */
+/* 亮牌浮层：整屏压暗（模态），牌放大，视线只落在浮层里 */
+.npc-show {
+  position: fixed; left: 0; top: 0; right: 0; bottom: 0;
+  z-index: 150; display: flex; align-items: center; justify-content: center;
+}
+.npc-show.masked { background: rgba(18, 14, 8, 0.62); animation: maskFade 0.25s ease-out; }
+@keyframes maskFade { from { opacity: 0; } to { opacity: 1; } }
+.npc-show-box {
+  background: linear-gradient(160deg, rgba(58,46,31,0.97), rgba(91,74,51,0.97));
+  border: 8rpx solid #fff; border-radius: 36rpx;
+  box-shadow: 0 18rpx 0 rgba(0,0,0,0.3), 0 0 50rpx rgba(143,184,255,0.7);
+  padding: 22rpx 34rpx; text-align: center; color: #fff; min-width: 460rpx;
+  animation: npcShowPop 0.3s cubic-bezier(.2,.9,.3,1.5);
+}
+@keyframes npcShowPop { 0% { transform: scale(0.78); } 100% { transform: scale(1); } }
+.npc-show-head { font-size: 32rpx; font-weight: 900; margin-bottom: 16rpx; color: #ffe08a; }
+.npc-show-cards { display: flex; gap: 12rpx; justify-content: center; align-items: center; flex-wrap: wrap; margin-bottom: 16rpx; }
+.npc-show-cards .card { width: 120rpx; height: 170rpx; font-size: 36rpx; }
+.npc-show-cards .plus { color: #fff; font-weight: 900; font-size: 28rpx; opacity: 0.8; }
+.npc-show-cards .card.is-target { box-shadow: 0 0 0 6rpx #ffd86b, 0 0 30rpx #ffd86b; }
+.npc-show-eq { font-size: 30rpx; font-weight: 800; color: #fff; }
+.npc-show-eq.pending { opacity: 0.35; }
+/* 已经翻出来的牌：静止，不重复播翻牌动画 */
+.npc-show-cards .card.revealed { opacity: 1; }
+/* NPC 先把牌逐张"翻开"（animation-delay 由 game.js 逐张递增） */
+@keyframes flipIn {
+  0%   { opacity: 0; transform: perspective(800rpx) rotateY(88deg) scale(0.85); }
+  60%  { opacity: 1; transform: perspective(800rpx) rotateY(-12deg) scale(1.06); }
+  100% { opacity: 1; transform: perspective(800rpx) rotateY(0) scale(1); }
+}
+.npc-show-cards .card.flip-in { animation: flipIn 0.45s ease-out backwards; }
+/* 再"合到一起"：浮层里的牌收拢、淡出 */
+@keyframes npcMerge {
+  0%   { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.55) translateY(10rpx); opacity: 0; }
+}
+.npc-show.merging .npc-show-cards .card { animation: npcMerge 0.5s ease-in forwards; }
+.npc-show.merging .npc-show-eq { opacity: 0.45; }
+
+/* ===== NPC 大娃娃：说重要台词时蹦出来一个放大的卡通头像 + 对话气泡 ===== */
+.npc-speak {
+  position: fixed; left: 50%; top: 120rpx; transform: translateX(-50%);
+  display: flex; align-items: flex-end; gap: 24rpx;
+  z-index: 180; max-width: 92vw; pointer-events: none;
+  animation: speakPop 0.36s cubic-bezier(.2,.9,.3,1.6) backwards;
+}
+.npc-speak-face { width: 260rpx; height: 260rpx; flex: 0 0 260rpx; display: flex; align-items: center; justify-content: center; }
+.npc-speak-face .npc-face { transform: scale(2.4); transform-origin: center center; }
+.npc-speak-bubble {
+  position: relative; max-width: 520rpx;
+  background: #fff; border: 8rpx solid #a9d8ff; border-radius: 32rpx;
+  padding: 22rpx 30rpx; font-size: 34rpx; font-weight: 900; color: #3a2e1f;
+  box-shadow: 0 10rpx 0 rgba(0,0,0,0.14); line-height: 1.35;
+}
+.npc-speak-bubble::before {
+  content: ''; position: absolute; left: -26rpx; bottom: 34rpx;
+  border: 18rpx solid transparent; border-right-color: #a9d8ff;
+}
+@keyframes speakPop {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(46rpx) scale(0.68); }
+  65%  { opacity: 1; transform: translateX(-50%) translateY(-10rpx) scale(1.04); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+/* ===== NPC 卡通形象：歪戴一顶反扣棒球帽、叼着牙签的小痞机器人 =====
+   纯 WXSS 画（不依赖图片素材）。表情只换"眉 / 眼 / 嘴"三处零件，
+   外加贪心时的星星眼与口水、沮丧时的泪滴。 */
+.seat.npc .who { align-items: flex-start; }
+.npc-face { position: relative; width: 96rpx; height: 96rpx; flex: 0 0 96rpx; }
+
+/* 光晕（颜色跟表情走） */
+.npc-face .halo { position: absolute; left: 0; top: 0; width: 96rpx; height: 96rpx; border-radius: 50%; background: #8fb8ff; }
+
+/* 天线小灯泡 */
+.npc-face .ant { position: absolute; left: 50%; top: -1rpx; width: 4rpx; height: 9rpx; margin-left: -2rpx; background: #2b2b2b; border-radius: 2rpx; }
+.npc-face .ant::after { content: ''; position: absolute; left: -5rpx; top: -14rpx; width: 15rpx; height: 15rpx; border-radius: 50%; background: #a9d8ff; border: 3rpx solid #2b2b2b; box-sizing: border-box; }
+
+/* 耳机（压在脑袋两侧） */
+.npc-face .ear { position: absolute; top: 42rpx; width: 15rpx; height: 15rpx; border-radius: 50%; background: #ffd9a0; border: 4rpx solid #2b2b2b; box-sizing: border-box; }
+.npc-face .ear.l { left: 4rpx; }
+.npc-face .ear.r { right: 4rpx; }
+
+/* 大脑袋 */
+.npc-face .head { position: absolute; left: 10rpx; top: 19rpx; width: 76rpx; height: 68rpx; border-radius: 26rpx; background: #fdf6e6; border: 5rpx solid #2b2b2b; box-sizing: border-box; }
+
+/* 反扣的棒球帽 + 翘起来的帽檐 */
+.npc-face .cap { position: absolute; left: 4rpx; top: -26rpx; width: 70rpx; height: 32rpx; border-radius: 50% 50% 0 0 / 100% 100% 0 0; background: #5b7fe0; border: 5rpx solid #2b2b2b; border-bottom: none; box-sizing: border-box; }
+.npc-face .brim { position: absolute; left: 53rpx; top: -12rpx; width: 38rpx; height: 15rpx; border-radius: 50%; background: #4361c0; border: 4rpx solid #2b2b2b; box-sizing: border-box; transform: rotate(-16deg); }
+
+/* 眉 / 眼 / 嘴 / 腮红（默认＝idle 的样子） */
+.npc-face .brow { position: absolute; top: 12rpx; width: 17rpx; height: 4rpx; background: #2b2b2b; border-radius: 2rpx; }
+.npc-face .brow.l { left: 15rpx; }
+.npc-face .brow.r { right: 15rpx; }
+.npc-face .eye { position: absolute; top: 16rpx; width: 17rpx; height: 17rpx; border-radius: 50%; background: #2b2b2b; }
+.npc-face .eye.l { left: 15rpx; }
+.npc-face .eye.r { right: 15rpx; }
+.npc-face .eye::after { content: ''; position: absolute; left: 4rpx; top: 4rpx; width: 6rpx; height: 6rpx; border-radius: 50%; background: #fff; }
+.npc-face .mouth { position: absolute; left: 50%; margin-left: -9rpx; top: 40rpx; width: 18rpx; height: 8rpx; border-bottom: 4rpx solid #2b2b2b; border-radius: 0 0 16rpx 16rpx; box-sizing: border-box; }
+.npc-face .blush { position: absolute; top: 34rpx; width: 16rpx; height: 11rpx; border-radius: 50%; background: #ff9ec4; opacity: 0.8; display: none; }
+.npc-face .blush.l { left: 5rpx; }
+.npc-face .blush.r { right: 5rpx; }
+
+/* 小道具：牙签 / 泪滴 / 口水（默认全不显示，由表情开关） */
+.npc-face .extra { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.npc-face .extra > view { display: none; position: absolute; }
+.npc-face .extra .toothpick { left: 56rpx; top: 41rpx; width: 17rpx; height: 3rpx; background: #e0b74a; border-radius: 2rpx; transform: rotate(-41deg); transform-origin: left center; }
+.npc-face .extra .tear { left: 16rpx; top: 34rpx; width: 8rpx; height: 11rpx; background: #8fd0ff; border: 2rpx solid #2b2b2b; border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%; }
+.npc-face .extra .drool { left: 54rpx; top: 55rpx; width: 7rpx; height: 10rpx; background: #8fd0ff; border: 2rpx solid #2b2b2b; border-radius: 50%; }
+
+/* —— idle（默认）：叼牙签 + 腮红 + 小微笑 —— */
+.npc-face.mood-idle .extra .toothpick { display: block; }
+.npc-face.mood-idle .blush { display: block; }
+
+/* —— think：一高一低的眉 + 瞟向一边的眼珠 + 抿成小圈的嘴 —— */
+.npc-face.mood-think .halo { background: #c9a9ff; }
+.npc-face.mood-think .ant::after { background: #c9a9ff; }
+.npc-face.mood-think .brow.l { top: 14rpx; }
+.npc-face.mood-think .brow.r { top: 9rpx; }
+.npc-face.mood-think .eye { top: 16rpx; width: 18rpx; height: 18rpx; background: #fff; border: 3rpx solid #2b2b2b; box-sizing: border-box; }
+.npc-face.mood-think .eye.l { left: 14rpx; }
+.npc-face.mood-think .eye.r { right: 14rpx; }
+.npc-face.mood-think .eye::after { left: 6rpx; top: 4rpx; width: 6rpx; height: 6rpx; background: #2b2b2b; }
+.npc-face.mood-think .mouth { margin-left: 1rpx; top: 40rpx; width: 11rpx; height: 11rpx; border: none; border-radius: 50%; background: #2b2b2b; }
+
+/* —— happy：笑眼 + 张嘴笑 + 腮红 —— */
+.npc-face.mood-happy .halo { background: #ffcf4d; }
+.npc-face.mood-happy .ant::after { background: #ffcf4d; }
+.npc-face.mood-happy .brow { top: 9rpx; }
+.npc-face.mood-happy .brow.l { transform: rotate(-9deg); }
+.npc-face.mood-happy .brow.r { transform: rotate(9deg); }
+.npc-face.mood-happy .eye { top: 19rpx; width: 18rpx; height: 11rpx; background: transparent; border: none; border-top: 4rpx solid #2b2b2b; border-radius: 18rpx 18rpx 0 0 / 14rpx 14rpx 0 0; box-sizing: border-box; }
+.npc-face.mood-happy .eye::after { display: none; }
+.npc-face.mood-happy .eye.l { left: 14rpx; }
+.npc-face.mood-happy .eye.r { right: 14rpx; }
+.npc-face.mood-happy .mouth { margin-left: -10rpx; top: 38rpx; width: 20rpx; height: 14rpx; border: none; border-radius: 0 0 16rpx 16rpx; background: #2b2b2b; }
+.npc-face.mood-happy .blush { display: block; }
+.npc-face.mood-happy .extra .toothpick { display: block; }
+
+/* —— greedy（捞到王）：星星眼 + 大笑 + 流口水 —— */
+.npc-face.mood-greedy .halo { background: #ffd86b; }
+.npc-face.mood-greedy .ant::after { background: #ffd86b; }
+.npc-face.mood-greedy .brow { top: 8rpx; }
+.npc-face.mood-greedy .brow.l { transform: rotate(-14deg); }
+.npc-face.mood-greedy .brow.r { transform: rotate(14deg); }
+.npc-face.mood-greedy .eye {
+  top: 15rpx; width: 22rpx; height: 22rpx; background: #ffcf4d; border: none; border-radius: 0;
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+}
+.npc-face.mood-greedy .eye::after { display: none; }
+.npc-face.mood-greedy .eye.l { left: 12rpx; }
+.npc-face.mood-greedy .eye.r { right: 12rpx; }
+.npc-face.mood-greedy .mouth { margin-left: -10rpx; top: 37rpx; width: 20rpx; height: 15rpx; border: none; border-radius: 3rpx 3rpx 16rpx 16rpx; background: #2b2b2b; }
+.npc-face.mood-greedy .blush { display: block; }
+.npc-face.mood-greedy .extra .toothpick { display: block; }
+.npc-face.mood-greedy .extra .drool { display: block; }
+
+/* —— shock：瞪眼 + 下巴掉了 —— */
+.npc-face.mood-shock .halo { background: #ffb3c6; }
+.npc-face.mood-shock .ant::after { background: #ffb3c6; }
+.npc-face.mood-shock .brow { top: 6rpx; }
+.npc-face.mood-shock .brow.l { transform: rotate(-18deg); }
+.npc-face.mood-shock .brow.r { transform: rotate(18deg); }
+.npc-face.mood-shock .eye { top: 15rpx; width: 19rpx; height: 19rpx; background: #fff; border: 3rpx solid #2b2b2b; box-sizing: border-box; }
+.npc-face.mood-shock .eye::after { left: 3rpx; top: 3rpx; width: 6rpx; height: 6rpx; background: #2b2b2b; }
+.npc-face.mood-shock .eye.l { left: 14rpx; }
+.npc-face.mood-shock .eye.r { right: 14rpx; }
+.npc-face.mood-shock .mouth { margin-left: -5rpx; top: 38rpx; width: 11rpx; height: 17rpx; border: none; border-radius: 50%; background: #2b2b2b; }
+
+/* —— sad：八字眉 + 耷拉眼 + 撇嘴 + 眼泪 —— */
+.npc-face.mood-sad .halo { background: #c9c1b4; }
+.npc-face.mood-sad .ant::after { background: #c9c1b4; }
+.npc-face.mood-sad .brow { top: 14rpx; }
+.npc-face.mood-sad .brow.l { transform: rotate(14deg); }
+.npc-face.mood-sad .brow.r { transform: rotate(-14deg); }
+.npc-face.mood-sad .eye { top: 19rpx; width: 17rpx; height: 10rpx; border-radius: 0 0 17rpx 17rpx; }
+.npc-face.mood-sad .eye::after { display: none; }
+.npc-face.mood-sad .eye.l { left: 15rpx; }
+.npc-face.mood-sad .eye.r { right: 15rpx; }
+.npc-face.mood-sad .mouth { margin-left: -9rpx; top: 43rpx; width: 18rpx; height: 7rpx; border: none; border-top: 4rpx solid #2b2b2b; border-radius: 14rpx 14rpx 0 0; }
+.npc-face.mood-sad .extra .tear { display: block; }
+
+/* NPC 台词气泡 */
+.who-text { display: flex; flex-direction: column; gap: 6rpx; }
+.who-name { font-weight: 800; font-size: 26rpx; }
+.npc-say {
+  position: relative; display: inline-block; max-width: 460rpx;
+  background: #fff; border: 5rpx solid #a9d8ff; border-radius: 22rpx;
+  padding: 8rpx 18rpx; font-size: 24rpx; font-weight: 800; color: #3a2e1f;
+  box-shadow: 0 5rpx 0 rgba(0,0,0,0.1);
+}
+.npc-say::before { content: ''; position: absolute; left: -16rpx; top: 16rpx; border: 10rpx solid transparent; border-right-color: #a9d8ff; }
+
+/* 胜率估计 */
+.odds-bar { display: flex; height: 22rpx; border-radius: 999rpx; overflow: hidden; border: 4rpx solid #fff; box-shadow: 0 4rpx 0 rgba(0,0,0,0.1); background: #eee; margin-bottom: 12rpx; }
+.odds-me { background: linear-gradient(180deg, #9be8b0, #4fcf7c); height: 100%; }
+.odds-npc { background: linear-gradient(180deg, #8fb8ff, #5b8bf0); height: 100%; }
+.odds-draw { background: #d9d2c5; height: 100%; }
+.odds-note { font-size: 20rpx; font-weight: 700; opacity: 0.65; margin-top: 8rpx; line-height: 1.5; }
+
+/* 结算：算分过程明细 */
+.over-score { font-size: 30rpx; font-weight: 800; margin-bottom: 8rpx; }
+.over-say { font-size: 26rpx; font-weight: 800; margin: 6rpx 0 12rpx; color: #3b6fd4; }
+.over-rate { font-size: 22rpx; font-weight: 800; opacity: 0.75; margin-bottom: 12rpx; }
+.score-side { text-align: left; margin: 14rpx 0 18rpx; border-top: 5rpx dashed #ffd9a0; padding-top: 12rpx; }
+.score-title { font-size: 26rpx; font-weight: 900; margin-bottom: 10rpx; }
+.score-side.me .score-title { color: #2f8f5b; }
+.score-side.npc .score-title { color: #3b6fd4; }
+.score-row { display: flex; font-size: 22rpx; }
+.score-row text { flex: 1; padding: 3rpx 6rpx; }
+.score-row text:first-child { flex: 1.2; }
+.score-row text:last-child { text-align: right; }
+.score-row.head { font-weight: 900; opacity: 0.7; border-bottom: 2rpx solid #e6d9bf; }
+.score-row.zero { opacity: 0.4; }
+.score-row .plus { color: #2f8f5b; font-weight: 800; }
+.score-row .minus { color: #d1473a; font-weight: 800; }
+.score-row.sum { border-top: 2rpx solid #e6d9bf; font-weight: 800; }
+.score-row.final { border-top: 4rpx solid #ffcf4d; font-weight: 900; font-size: 24rpx; }
+.score-row .score { color: #ff8a5c; font-size: 32rpx; }
+.all-cards { font-size: 20rpx; line-height: 1.7; text-align: left; white-space: pre-wrap; opacity: 0.8; margin: 10rpx 0; }

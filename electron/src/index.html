@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>欢乐十四分</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="title">🎴 欢乐十四分 <span class="sub">凑 14 · 单机版</span></div>
+      <div class="top-actions">
+        <button id="soundBtn" class="btn btn-warm">🔊 音效开</button>
+        <button id="helpBtn" class="btn btn-warm">❓ 玩法</button>
+        <button id="newGame" class="btn btn-warm">🔄 新游戏</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <main class="board">
+        <!-- 对手区 -->
+        <section class="seat npc">
+          <div class="who">
+            <div id="npcAvatar" class="npc-avatar"></div>
+            <div class="who-text">
+              <div class="who-name">小痞机器人 <span id="npcCount" class="pill">0</span></div>
+              <div id="npcSay" class="npc-say hidden"></div>
+            </div>
+          </div>
+          <div id="npcHand" class="hand backs"></div>
+        </section>
+
+        <!-- 桌面 -->
+        <section class="table-area">
+          <div class="row-label">桌 面 · 上 下 两 行 共 6 张</div>
+          <div id="table" class="card-grid"></div>
+        </section>
+
+        <!-- 补牌堆 + 提示 + 操作 -->
+        <section class="center-info">
+          <div class="pile">🂠 补牌堆 <b id="drawCount">0</b> 张</div>
+          <div id="message" class="message">点击「新游戏」开始</div>
+          <div id="controls" class="controls"></div>
+        </section>
+
+        <!-- 我方区 -->
+        <section class="seat player">
+          <div class="who">
+            <div class="who-name">🧑 你 <span id="playerCount" class="pill">0</span></div>
+          </div>
+          <div id="playerHand" class="hand"></div>
+        </section>
+      </main>
+
+      <aside class="sidebar">
+        <div class="panel">
+          <h3>难 度</h3>
+          <div id="diffSeg" class="diff-seg">
+            <button class="diff-btn" data-diff="easy">容易</button>
+            <button class="diff-btn" data-diff="medium">中等</button>
+            <button class="diff-btn" data-diff="hard">难</button>
+            <button class="diff-btn" data-diff="hell">地狱</button>
+            <button class="diff-btn" data-diff="adaptive">自适应</button>
+          </div>
+          <div id="diffDesc" class="diff-desc"></div>
+        </div>
+        <div class="panel">
+          <h3>比 分</h3>
+          <div class="score-row me"><span>🧑 你</span><b id="scoreMe">0.00</b></div>
+          <div class="score-row npc"><span>🤖 NPC</span><b id="scoreNpc">0.00</b></div>
+          <div id="scoreLead" class="score-lead even">暂时打平</div>
+        </div>
+        <div class="panel">
+          <h3>战 况</h3>
+          <div class="stat"><span>你的战利品</span><b id="pLoot">0</b></div>
+          <div class="stat"><span>NPC 战利品</span><b id="nLoot">0</b></div>
+          <div class="stat muted"><span>你的罚牌</span><b id="pPen">0</b></div>
+          <div class="stat muted"><span>NPC 罚牌</span><b id="nPen">0</b></div>
+        </div>
+        <div class="panel">
+          <h3>胜 率 估 计</h3>
+          <div id="oddsBar" class="odds-bar"></div>
+          <div class="stat"><span>你胜</span><b id="oddsWin">—</b></div>
+          <div class="stat"><span>NPC 胜</span><b id="oddsLose">—</b></div>
+          <div class="stat muted"><span>平局</span><b id="oddsDraw">—</b></div>
+          <div class="stat muted"><span>模拟局数</span><b id="oddsN">—</b></div>
+          <div class="stat"><span>决策质量</span><b id="decisionRate">—</b></div>
+          <div class="odds-note">同水平假设（双方都按贪心打），未知牌按概率重发</div>
+        </div>
+        <div class="panel log-panel">
+          <h3>日 志</h3>
+          <div id="log" class="log"></div>
+        </div>
+        <div class="panel tips">
+          <h3>计 分 小 抄</h3>
+          <div>🂡黑桃=1　💗红桃=0.75</div>
+          <div>♣草花=0.5　♦方片=0.25</div>
+          <div>👑大王=1　🌟小王=0.75</div>
+          <div>配 14 时大小王算 0（随便配）</div>
+        </div>
+      </aside>
+
+      <!-- NPC 出牌亮牌浮层：玩家看清 NPC 每一轮吃了哪些牌 -->
+      <div id="npcShow" class="npc-show hidden"></div>
+
+      <!-- NPC 大娃娃：说重要台词时蹦出来（position:fixed，不占版面） -->
+      <div id="npcSpeak" class="npc-speak hidden">
+        <div id="npcSpeakFace" class="npc-speak-face"></div>
+        <div class="npc-speak-bubble"><div id="npcSpeakText" class="npc-speak-text"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 浮动提示层：匹配得分 / 补牌到账等即时反馈 -->
+  <div id="fx" class="fx"></div>
+
+  <div id="firstBanner" class="first-banner hidden"><span id="firstBannerText">你先手</span></div>
+
+  <div id="helpModal" class="modal hidden">
+    <div class="modal-box">
+      <h2>🤡 怎么玩 · 欢乐十四分</h2>
+      <div class="help-body">
+        <p><b>目标</b>：把牌凑成 14 分收走当战利品，一局结束比谁分高。</p>
+        <p><b>牌怎么计分</b><br>
+        · 花色：🂡黑桃 1 分、💗红桃 0.75、♣草花 0.5、♦方片 0.25<br>
+        · 大小王：👑大王 1 分、🌟小王 0.75；<b>配 14 时大小王算 0</b>（随便配，等于白送一张好牌）<br>
+        · 点数 A=1 … K=13</p>
+        <p><b>怎么打一手（先手随机，轮流）</b><br>
+        ① 点你的手牌 + 点桌面 1 张牌；若加起来 = 14 → 点「✅ 确认匹配」→ 牌飞过去合拢收进战利品。<br>
+        ② 凑不出 14？点「🚫 罚掉选中的 1 张」，丢 1 张（隐藏，扣分）。</p>
+        <p><b>难度（侧栏可切，五档）</b>：容易=大半随机、常送高分牌；中等=一步贪心；难=出牌贪心但补牌不喂你；地狱=每种打法推演到终局；自适应=跟着你的战绩自动升降档，目标把你卡在五五开。每次开局都会先问你一句，勾了"别再问"就跳过。</p>
+        <p><b>收牌之后</b>：你挑 1 张手牌补回桌面（决定给对手留什么），其余自动从补牌堆补满到 4 张。</p>
+        <p><b>NPC（小痞机器人）</b>：每轮都看得见——先指牌、再翻牌、再合牌；重要时刻会蹦出大娃娃说话。</p>
+        <p><b>残局与结算</b>：补牌堆抓完，手牌只减不增，直到双方都打不出、手牌耗尽。得分 = 战利品合计 − 罚牌合计，高者胜。侧栏实时比分牌随时看谁领先，胜率是同水平假设下的赢面估计。</p>
+      </div>
+      <button id="helpClose" class="btn btn-warm btn-big">开始游戏</button>
+    </div>
+  </div>
+
+  <div id="diffModal" class="modal hidden">
+    <div class="modal-box">
+      <h2>🎚 这局打什么难度？</h2>
+      <div id="askDiffSeg" class="diff-seg ask-seg">
+        <button class="diff-btn" data-diff="easy">容易</button>
+        <button class="diff-btn" data-diff="medium">中等</button>
+        <button class="diff-btn" data-diff="hard">难</button>
+        <button class="diff-btn" data-diff="hell">地狱</button>
+        <button class="diff-btn" data-diff="adaptive">自适应</button>
+      </div>
+      <div id="askDiffDesc" class="diff-desc"></div>
+      <label class="ask-never"><input type="checkbox" id="askDiffNever"> 以后开局别再问我</label>
+      <button id="askDiffGo" class="btn btn-warm btn-big">开 始</button>
+    </div>
+  </div>
+
+  <div id="overModal" class="modal hidden">
+    <div class="modal-box">
+      <h2 id="overTitle">游戏结束</h2>
+      <div id="overBody"></div>
+      <button id="overNew" class="btn btn-warm btn-big">再来一局</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

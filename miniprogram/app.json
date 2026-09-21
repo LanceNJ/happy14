@@ -1,0 +1,12 @@
+{
+  "pages": [
+    "pages/game/game"
+  ],
+  "window": {
+    "navigationBarTitleText": "欢乐十四分",
+    "navigationBarBackgroundColor": "#ffcf4d",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#fff7e6"
+  },
+  "style": "v2"
+}

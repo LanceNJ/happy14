@@ -1,0 +1,25 @@
+# ---- 构建产物（由 `node tools-standalone.js` 生成，不入库）----
+欢乐十四分.html
+欢乐十四分-单机版.html
+欢乐十四分-手机版.html
+site-mobile/
+
+# ---- 本机过程快照（历史截图；README 用图在 docs/shots/）----
+ui-*.png
+tools-icon180.png
+_shots/
+
+# ---- 依赖 ----
+node_modules/
+
+# ---- 临时/调试脚本与日志 ----
+_*.js
+_*.json
+_*.txt
+_*.log
+_*.out
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini

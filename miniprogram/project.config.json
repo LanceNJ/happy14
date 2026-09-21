@@ -1,0 +1,13 @@
+{
+  "description": "欢乐十四分小程序 - 卡通版凑14单机游戏",
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "urlCheck": false
+  },
+  "compileType": "miniprogram",
+  "appid": "touristappid",
+  "projectname": "happy14",
+  "miniprogramRoot": "./"
+}

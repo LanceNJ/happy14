@@ -147,6 +147,17 @@ function drawOne(state) {
   return state.drawPile.length ? state.drawPile.pop() : null;
 }
 
+// 只把手牌补满到 4（不往桌面放牌）：给"假设我少放一张牌"的评估场面用
+function refillHandTo4(st, who) {
+  const hk = handKey(who);
+  while (st[hk].length < 4) {
+    const d = drawOne(st);
+    if (!d) break;
+    st[hk].push(d);
+  }
+  return st[hk];
+}
+
 function handKey(who) { return who === 'player' ? 'playerHand' : 'npcHand'; }
 function lootKey(who) { return who === 'player' ? 'playerLoot' : 'npcLoot'; }
 function penKey(who) { return who === 'player' ? 'playerPenalty' : 'npcPenalty'; }
@@ -262,13 +273,40 @@ function rankMoves(moves) {
   });
 }
 
+// 同点数支配分组（NPC 专用；玩家侧 UI 需要完整候选列表 → 不动 findMoves）：
+// 两个候选若 handCards 完全相同，桌面那张必然同点数（否则凑不到 14），而"能走的路线集合"
+// 只由点数决定、花色只决定分值 → 取分更高的那条通常更好：自己多得 Δ，且留在桌面的那张
+// 便宜牌对双方都只值 Δ 少（真实价值上弱优于"拿便宜那张"）。
+// ⚠️ 但它**不是严格支配**（2026-09-23 实测改正）：花色分值是平的（♠1/♥0.75/♣0.5/♦0.25，
+//    不乘点数），同点数最多差 0.75；而 evalMoveRollout 是确定性贪心推演（不连续估计器）——
+//    0.25 的扰动会让某一手的 rankMoves 排序翻转、整条推演线分叉。实测"同补牌下 rep >= alt"
+//    只占 95.64%，4.36% 反例（119/2731 配对样本，最大 −35 分，见 _probe_dom.js）。
+//    所以这是"实测更优"而非"可证不差"：校准台配对 N=500，hell 91.8% → 94.0%（对照组 gcHard 不变）。
+// 返回 {rep, alts}：rep = 组内分值最高的代表，alts = 组内全部候选（含 rep）。
+// 调用方用 alts 里各张牌算出的补牌去评 rep：选桌面牌与选补牌本来是两个决策，分开评会让 0.25 的
+// 差值被补牌差异淹没；合并评可让组内这些选项仍被完整考察，且成本与逐张评相同。
+// 传入的表须已按分值降序排好（rankMoves 的输出）；分组顺序即代表的分值顺序。
+function dominanceGroups(moves) {
+  const byKey = new Map();
+  for (const mv of moves) {
+    const key = mv.handCards.map((c) => c.id).sort().join('|');
+    if (!byKey.has(key)) byKey.set(key, { rep: mv, alts: [] });
+    byKey.get(key).alts.push(mv);
+  }
+  return Array.from(byKey.values());
+}
+
+// 只要每组的代表（同点数支配剪枝的简写形式；供探针/校准台与外部调用）
+function pruneDominatedMoves(moves) {
+  return dominanceGroups(moves).map((g) => g.rep);
+}
 // ---------- NPC 难度档位（仅对 NPC 生效；玩家永远是"人"） ----------
 // 强度由 difficulty-lab.js 实测校准（配对发牌、先后手交替、玩家基线=贪心）：
 //   easy   ≈35%  多数时候乱出（偶尔正常），罚牌还可能扔掉高分牌
 //   medium ≈52%  一步贪心（原行为）：出当前这一手最大分、补到桌面那张挑分值最低的
 //   hard   ≈76%  出牌同 medium，补牌换成"净威胁最小"：对手下一手收益 − 2×我下一手收益
 //   hell   ≈95%  在前 4 高分手牌候选里 rollout（双方贪心走到底）估终局净分差，取最高
-//   adaptive     只存在于 UI 层：按玩家近期战绩在上面四档之间自动升降，再传实际档位进来
+//   (2026-09-22 自适应已移除：四档固定，高层难度由学习系统个性化接管，见 DEFAULT_WEIGHTS/NPC_WEIGHTS)
 //
 // 四条用血换来的经验，改这段代码前先读：
 //  ① 真正的杠杆是"补到桌面那一张"，不是"出哪一手"——只靠出牌贪心永远卡在 52%；
@@ -278,18 +316,118 @@ function rankMoves(moves) {
 //  ③ 不许直接读对手手牌来算这些：那是上帝视角 AI，表现为"永远不喂你牌"，玩家能明显感觉到被针对。
 //     只用合法可见信息（未见池 = 对手手牌∪对手罚牌∪补牌堆，三者对 NPC 不可区分）抽样估计；
 //  ④ 校准必须用能真正轮流行动的沙盒（见 difficulty-lab.js 顶部注释里的踩坑记录）。
-const DIFFICULTIES = ['easy', 'medium', 'hard', 'hell', 'adaptive'];
-// 自适应档内部挑选用的"实际档位"（'adaptive' 是 UI 层概念，内核不参与它的升降逻辑）
-const BASE_DIFFICULTIES = ['easy', 'medium', 'hard', 'hell'];
+const DIFFICULTIES = ['easy', 'medium', 'hard', 'hell'];
+// 2026-09-22 自适应档已移除：合法档位仅剩四档，学习系统通过 setNpcWeights 个性化 hard/hell
+const BASE_DIFFICULTIES = ['easy', 'medium', 'hard', 'hell']; // 2026-09-22 自适应已移除，声明保留供离线工具/移动端引用
 // hard 档补牌的"给自己留机会"权重（校准台实测峰值，N=1500：w=0→67.1%，w=0.5→73.9%，w=2→76.2%，w=3→74.3%）
-const HARD_REPLACE_W = 2;
+// ---------- NPC 决策权重（可学习；学习系统会改写 NPC_WEIGHTS 让高层难度个性化） ----------
+// 四个旋钮，对应四条原则：
+//   defenseW  防守：补牌别把对手能凑14的牌喂到桌上（别资敌）
+//   selfW     自保：补牌后我下一手能不能捞（留对我有用的牌）
+//   keepW     甩负担：补牌时把"对我没用/留着要重罚"的牌推上桌（优先推大牌、推黑桃，避免自己罚重分）
+//   playW     记牌：用"未见点数的精确多重集"算可玩性，决定罚牌/留牌（K 只剩 A 能配时先罚）
+// 出牌的"优先用王"是排序硬规则（见 rankMoves），不进权重；罚牌不再硬护王（原 cost=99 已删）。
+const DEFAULT_WEIGHTS = {
+  defenseW: 2.0,   // 别资敌（原 HARD_REPLACE_W 校准峰值）
+  selfW: 2.0,     // 留对我有用的牌（原 rollout 的"给我下一手"项）
+  keepW: 1.0,      // 甩负担/推大牌
+  playW: 0.8,     // 记牌：罚牌可玩性权重（可玩=贵→少罚；K 只剩 A 时最便宜→先罚）
+};
+let NPC_WEIGHTS = Object.assign({}, DEFAULT_WEIGHTS);
+// 学习系统调用：合并默认与已学权重（缺字段回退默认）
+function setNpcWeights(w) {
+  if (w && typeof w === 'object') {
+    NPC_WEIGHTS = Object.assign({}, DEFAULT_WEIGHTS, w);
+  }
+}
+function getNpcWeights() { return Object.assign({}, NPC_WEIGHTS); }
+
+// 记牌：某点数还剩几张没露面（全副 2 副 -> 普通点数 8 张，王各 4 张）
+function unseenOfRank(state, rank) {
+  const total = (rank >= 14) ? 4 : 8;
+  let seen = 0;
+  for (const c of visiblePool(state)) if (c.rank === rank) seen++;
+  return Math.max(0, total - seen);
+}
+
+// ---------- 可玩性：穷尽"这张牌还能不能用上" ----------
+// 原则（玩家洞见 2026-09-22）：不能只看"单张搭档(14 - 点数)还剩几张"。
+//   反例：4 的搭档 10 只剩 2 张（看着快死），但我手上正好有 2、桌面正好有 8，
+//        4+2+8=14 —— 现在就走的通。所以先穷尽"现在"的路线，再谈概率。
+// 找到这张牌属于哪只手（只读推断；模拟脚本只传 npcHand 时也能工作）
+function handOfCard(state, card) {
+  const ph = state.playerHand || [];
+  const nh = state.npcHand || [];
+  if (ph.some((c) => c.id === card.id)) return ph;
+  if (nh.some((c) => c.id === card.id)) return nh;
+  return null;
+}
+// 穷尽现在的全部合法路线：card + 其余手牌任意子集(=s) + 桌面恰好 1 张(=t)，
+// 判据与 findMoves 完全一致（card.matchValue + s + t.matchValue === 14），所以是精确枚举、不是概率代理。
+function useRoutes(state, card) {
+  const hand = handOfCard(state, card) || [card];
+  const others = hand.filter((c) => c.id !== card.id);
+  const table = state.table || [];
+  const routes = [];
+  const n = others.length;
+  for (let mask = 0; mask < (1 << n); mask++) {
+    let s = 0;
+    const sel = [];
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) { s += others[i].matchValue; sel.push(others[i]); }
+    const need = 14 - card.matchValue - s;
+    for (const t of table) if (t.matchValue === need) routes.push({ handCards: [card].concat(sel), tableCard: t });
+  }
+  return routes;
+}
+// 单张搭档（14 - 点数）还剩几张没露面：旧代理，现在只作为"差一张"的一路证据
+function complementLeft(state, card) {
+  const need = 14 - card.matchValue;
+  if (need <= 0 || need > 13) return 0;
+  // 搭档与自己同点（如 7 的搭档就是 7）时，"自己这张"不算还能再来的牌
+  const self = (need === card.rank) ? 1 : 0;
+  return Math.max(0, unseenOfRank(state, need) - self);
+}
+// "还差一张"：补到/抽到一张 r 就能配桌面现成的那张（打对折：得靠运气，且桌面那张还得留着）
+function oneAwayStrength(state, card) {
+  const table = state.table || [];
+  let best = 0;
+  for (let r = 1; r <= 13; r++) {
+    const u = unseenOfRank(state, r) - ((r === card.rank) ? 1 : 0);
+    if (u <= 0) continue;
+    const need = 14 - card.matchValue - r;
+    if (need < 0 || need > 13) continue;
+    if (!table.some((t) => t.matchValue === need)) continue;
+    best = Math.max(best, u / 8);
+  }
+  if (unseenOfRank(state, 14) + unseenOfRank(state, 15) > 0) {
+    const need = 14 - card.matchValue;
+    if (need >= 0 && need <= 13 && table.some((t) => t.matchValue === need)) best = Math.max(best, 0.5);
+  }
+  return best;
+}
+// 可玩性 0~1：现在就有路线 -> 1（王百搭也是 1）；否则取"差一张"里最强的那一路，上限 0.5。
+// 0 表示两跳以上：留着就是等重罚 -> 罚牌先罚它、补牌优先把它推上桌。
+function playability(state, card) {
+  if (useRoutes(state, card).length > 0) return 1;
+  if (card.matchValue === 0) return 1;
+  const base = Math.min(1, complementLeft(state, card) / 8);
+  const away = oneAwayStrength(state, card);
+  return Math.max(base, away * 0.5);
+}
+// 留牌价值（正=值得留，负=是负担该甩）：score*(2*可玩性-1)
+//   - 可玩性高（搭档还多）-> 正，留着能凑/能捞
+//   - 可玩性低（搭档快没了，如 K 只剩 A）-> 负，留着只能重罚，该甩
+// 罚牌代价 = -留牌价值（负担最便宜先罚）；补牌推力 = +留牌价值（负担最该推上桌）
+function keepValue(card, state) { return card.score * (2 * playability(state, card) - 1); }
+
+const HARD_REPLACE_W = 2; // 已并入 NPC_WEIGHTS.defenseW（2026-09-22）
 // NPC 罚牌的点数倾斜：总代价 = 价格 − 0.06×点数。玩家洞见（2026-09-19）：别只赔眼前最便宜的，
 // 大点数的牌凑14伙伴少（K 只能配 3），留着不如小牌值钱。校准台实测（配对发牌、先后手交替）：
 //   medium 基座 N=1000：现状 51.7% → k=0.04 55.8% / k=0.06 56.4%（峰值）/ k=0.08 54.9% / k=0.30 48.5%（过头反害）。
 //   hard   基座 N=1500：76.8% → k=0.04 77.1% / k=0.08 77.6%，持平略升。
 // k=0.06 起正好复现玩家举的例子：方片4(0.25) 与 红桃K(0.75) 二选一时罚 K 留 4。
 // 只对 NPC 生效；玩家侧基线（用于校准对比）保持"罚最便宜"不动。
-const PENALTY_RANK_W = 0.06;
+const PENALTY_RANK_W = 0.06; // 已并入 NPC_WEIGHTS.playW（记牌可玩性替代点数代理，2026-09-22）
 
 // 浅拷贝局面（卡牌对象只读不改），供预判时安全试算
 function cloneState(st) {
@@ -341,11 +479,19 @@ function opponentBestGain(st, who) {
 //   → hard 用 w=2；hell 本身 rollout 到终局，这个权衡已被整体评估吸收（实测 w=2 在噪声内），保持 w=0 更省。
 // 只用合法可见信息（未见池 = 对手手牌∪对手罚牌∪补牌堆，三者对 NPC 不可区分）抽样估计，不读对手真实手牌（经验②）。
 function netReplaceId(state, who, move, w) {
-  const weight = w || 0;
+  const defenseW = (typeof w === 'number') ? w : (NPC_WEIGHTS ? NPC_WEIGHTS.defenseW : 2);
+  const selfW = (NPC_WEIGHTS ? NPC_WEIGHTS.selfW : 2);
+  const keepW = (NPC_WEIGHTS ? NPC_WEIGHTS.keepW : 1);
   const hk = handKey(who);
   const capIds = new Set(move.handCards.map((c) => c.id));
   const rest = state[hk].filter((c) => !capIds.has(c.id));
   if (!rest.length) return null;
+  // 留牌价值的评估场面：先把出牌落地（桌面少一张、手牌 = rest），再把补牌位补满
+  // （抽牌堆顺序确定），得到一个所有候选共享的场面。不用"出牌前"的旧场面：
+  // 那时即将被拿走的手牌还在，会虚报出根本不成立的路线。
+  const sceneBase = cloneState(state);
+  capture(sceneBase, who, move);
+  refillHandTo4(sceneBase, who);
   const oppWho = who === 'player' ? 'npc' : 'player';
   const pool = state[handKey(oppWho)].concat(state[penKey(oppWho)], state.drawPile);
   const K = 12;
@@ -364,7 +510,7 @@ function netReplaceId(state, who, move, w) {
       let oppGain = 0, bestMv = null;
       for (const m of ms) if (m.score > oppGain) { oppGain = m.score; bestMv = m; }
       let myGain = 0;
-      if (weight > 0) {
+      if (selfW > 0) {
         // 推演对手走完这一手后的桌面：他拿走他的目标牌、再补一张最便宜的（手牌打光则不补）
         let table2 = st.table;
         if (bestMv) {
@@ -377,9 +523,11 @@ function netReplaceId(state, who, move, w) {
         const myMs = findMoves(myHand, table2);
         for (const m of myMs) if (m.score > myGain) myGain = m.score;
       }
-      sum += oppGain - weight * myGain;
+      sum += oppGain - selfW * myGain;
     }
-    const net = sum / K;
+    const oppThreat = sum / K;
+    const throwDesire = keepValue(c, sceneBase);
+    const net = defenseW * oppThreat + keepW * throwDesire;
     if (net < bestNet) { bestNet = net; bestId = c.id; }
   }
   return bestId;
@@ -431,11 +579,11 @@ function chooseAction(state, who, opts) {
       return { type: 'penalty', cardId: hi[0].id };
     }
     if (who === 'npc' && opts.difficulty) {
-      // NPC：总代价 = 价格 − PENALTY_RANK_W×点数（留小牌，见常量处的实测记录）。
-      // 王百搭永远不罚（在这里它最值钱也最灵活）。
+      // NPC 罚牌：代价 = 花色分 + playW×可玩性（可玩=贵、少罚；越"死"越便宜 → 先罚）。
+      // 保留低花色分能立刻省分；但"还能不能再用上"（记牌）常常更重要：K 只剩 A 能配就先罚 K，别罚还能用的方片。
       let best = hand[0], bestC = Infinity;
       for (const c of hand) {
-        const cost = c.isJoker ? 99 : (c.score - PENALTY_RANK_W * c.matchValue);
+        const cost = c.score + NPC_WEIGHTS.playW * playability(state, c);
         if (cost < bestC) { bestC = cost; best = c; }
       }
       return { type: 'penalty', cardId: best.id };
@@ -459,18 +607,21 @@ function chooseAction(state, who, opts) {
   } else if (diff === 'hard' && full) {
     // 难：出牌与中等一致（盯当前最大分），补牌换成"净威胁最小"（防守 + 给自己留机会，权重见常量）
     chosen = rankMoves(moves)[0];
-    replaceCardId = netReplaceId(state, who, chosen, HARD_REPLACE_W);
+    replaceCardId = netReplaceId(state, who, chosen);
   } else if (diff === 'hell' && full) {
-    // 地狱：前几手高分候选各 rollout 到终局，挑终局净分差最高的。
-    // 补牌这里用 w=0（纯防守）：rollout 已经整体评估了终局，权衡已被吸收，再加权重实测在噪声内。
-    const ranked = rankMoves(moves);
-    const breadth = Math.min(ranked.length, 4);
+    // 地狱：高分候选各 rollout 到终局，挑终局净分差最高的。
+    // 候选先按"同点数支配组"合并（只差花色的同点数走法等价，只留分值最高的"代表"），
+    // 再把组内每张牌各自算出的补牌都拿给代表评一遍 —— 理由与实测边界见 dominanceGroups。
+    // 好处：剪掉组内重复后，rollout 名额留给真正不同的路线（实测 38.7% 的决策里
+    // top-4 有重复占位、平均浪费 0.53 个名额；定向探针里 hell 拿便宜同点数牌 20/400 → 0/400）。
+    const groups = dominanceGroups(rankMoves(moves)).slice(0, 4);
     let best = null, bestV = -Infinity;
-    for (let mi = 0; mi < breadth; mi++) {
-      const mv = ranked[mi];
-      const rid = netReplaceId(state, who, mv, 0);
-      const v = evalMoveRollout(state, who, mv, rid);
-      if (v > bestV) { bestV = v; best = { mv: mv, rid: rid }; }
+    for (const grp of groups) {
+      for (const mv of grp.alts) {
+        const rid = netReplaceId(state, who, mv);
+        const v = evalMoveRollout(state, who, grp.rep, rid);
+        if (v > bestV) { bestV = v; best = { mv: grp.rep, rid: rid }; }
+      }
     }
     chosen = best.mv;
     replaceCardId = best.rid;
@@ -513,9 +664,9 @@ module.exports = {
   cardScore, sumScore, sumMatchValue,
   findMoves, hasMove, createGame, drawOne,
   capture, replaceAndRefill, penalty, computeScore, scoreDetail, isGameOver,
-  validatePlayerSelection, rankMoves, chooseAction, chooseNpcAction, totalCards,
-  visiblePool, unknownPool,
+  validatePlayerSelection, rankMoves, pruneDominatedMoves, dominanceGroups, chooseAction, chooseNpcAction, totalCards,
+  visiblePool, unknownPool, useRoutes, playability, keepValue, unseenOfRank, complementLeft,
   handKey, lootKey, penKey,
-  DIFFICULTIES, BASE_DIFFICULTIES, HARD_REPLACE_W, PENALTY_RANK_W, cloneState, opponentBestGain, netReplaceId, cheapestReplaceId,
+  DIFFICULTIES, BASE_DIFFICULTIES, HARD_REPLACE_W, PENALTY_RANK_W, DEFAULT_WEIGHTS, setNpcWeights, getNpcWeights, cloneState, opponentBestGain, netReplaceId, cheapestReplaceId,
   playOutGreedy, evalMoveRollout,
 };

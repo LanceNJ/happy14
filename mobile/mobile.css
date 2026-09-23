@@ -257,7 +257,6 @@ html, body {
 }
 .diff-btn.on { border-color: #ffd43b; background: #3a4a22; color: #fff; box-shadow: 0 0 0 2px #ffd43b66; }
 .diff-btn:active { transform: scale(.96); }
-.diff-seg .diff-btn[data-diff="adaptive"] { grid-column: 1 / -1; }
 .desc { font-size: 14px; color: #cbb98a; margin: 10px 2px; min-height: 30px; line-height: 1.5; }
 .never { display: flex; align-items: center; gap: 6px; font-size: 15px; color: #bbb; margin: 4px 2px; }
 
@@ -282,6 +281,21 @@ html, body {
 
 /* 玩法说明 */
 .help-body { font-size: 17px; line-height: 1.7; color: #e8efe8; }
+#learnModal .box { max-height: 86vh; overflow-y: auto; }
+.learn-body {
+  font-size: 13px; line-height: 1.6; color: #e8efe8; text-align: left;
+  background: #262626; border: 1px solid #3d3d3d; border-radius: 8px;
+  padding: 8px 10px; margin: 8px 2px; white-space: pre-wrap; word-break: break-word;
+}
+.learn-out {
+  display: none; width: 100%; box-sizing: border-box; min-height: 88px; margin-top: 6px;
+  font-size: 11px; font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #e8efe8; background: #232323; border: 1px solid #3d3d3d; border-radius: 8px;
+  padding: 6px 8px; resize: vertical;
+}
+.learn-out.show { display: block; }
+.learn-actions { display: flex; gap: 8px; margin-top: 10px; }
+.learn-actions .go { flex: 1; margin-top: 0; }
 .help-body p { margin: 8px 0; }
 .help-body b { color: #ffd43b; }
 .help-body i { color: #ffb3c6; font-style: normal; }
@@ -387,4 +401,70 @@ html, body {
     box-shadow: 0 0 60px rgba(0, 0, 0, .55);
   }
 }
+/* ===================== 新手辅导（带练） ===================== */
+.coach-panel {
+  flex: 0 0 auto;
+  margin: 0 2px;
+  background: rgba(20, 40, 26, 0.92);
+  border: 1px solid #4a7a52;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: #e8efe8;
+}
+.coach-panel.hidden { display: none; }
+.coach-h {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 14px; font-weight: 700; color: #ffd43b;
+  margin-bottom: 6px;
+}
+.coach-b { font-size: 14px; line-height: 1.5; color: #e8efe8; }
+.coach-b.big { font-size: 16px; }
+.coach-b b { color: #ffe08a; }
+.coach-prev { font-size: 13px; color: #bfe6ff; margin-bottom: 6px; }
+.coach-rows { display: flex; flex-direction: column; gap: 5px; max-height: 168px; overflow-y: auto; }
+.coach-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; border-radius: 9px;
+  background: #16241a; border: 1px solid #33523b;
+}
+.coach-row.best { background: #2c4226; border-color: #ffd43b; box-shadow: 0 0 0 1px #ffd43b66; }
+.coach-idx { width: 18px; text-align: center; color: #9fb89f; font-size: 13px; }
+.coach-eq { flex: 1 1 auto; font-weight: 700; }
+.coach-gain { color: #ffe08a; font-weight: 700; font-size: 13px; }
+.rec {
+  margin-left: 4px; padding: 1px 7px; border-radius: 8px;
+  background: #ffd43b; color: #16281a; font-size: 12px; font-weight: 800;
+}
+.coach-stepnav { display: flex; gap: 8px; margin-top: 8px; justify-content: center; }
+.coach-step {
+  padding: 9px 12px; border: none; border-radius: 9px;
+  background: #33523b; color: #fff; font-size: 14px; font-weight: 600; flex: 1 1 0;
+}
+.coach-step.use { background: #2f9e44; }
+.coach-step:active { transform: scale(.96); }
+.coach-stepmode {
+  padding: 2px 9px; border-radius: 9px; font-size: 12px; font-weight: 600;
+  background: #2b2b2b; color: #ddd; border: 1px solid #555;
+}
+.coach-stepmode.on { background: #3a4a22; color: #fff; border-color: #ffd43b; }
+
+/* 牌面辅导高亮（轻描边，不与选中样式抢） */
+.card.coach-hint { box-shadow: 0 0 0 2px #6fb0ffaa, 0 2px 4px rgba(0,0,0,.3); }
+.card.coach-hint-best { box-shadow: 0 0 0 3px #69db7c, 0 0 10px 2px #69db7caa; }
+
+/* 标题画面：辅导开关 */
+.ss-coach {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; margin: 16px 0 6px; font-size: 15px; color: #c9c2a6;
+}
+.ss-coach .toggle {
+  padding: 8px 18px; border-radius: 10px; font-size: 15px; font-weight: 700;
+  background: #2b2b2b; color: #ccc; border: 1px solid #555;
+}
+.ss-coach .toggle.on { background: #2f9e44; color: #fff; border-color: #ffd43b; box-shadow: 0 0 0 2px #ffd43b66; }
+
+/* 顶栏辅导按钮：开启时高亮 */
+#topbar .icon.on { background: #d9b45a; color: #16281a; box-shadow: 0 0 0 2px #f0dfae88; }
+
 

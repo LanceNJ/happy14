@@ -29,7 +29,117 @@ let ui = { selHand: [], selTable: null, noMoves: false, mergePlan: null, penPlan
 let snap = null;
 let episode = 0;
 
-// 难度（仅影响 NPC；含手机整体降一档 + 自适应）
+// ---------- 新手辅导（带练）状态 ----------
+let coachOn = false;
+let coachStepMode = false;
+let coachStepIdx = 0;
+let coachMoves = [];        // 当前玩家回合所有合法凑 14 组合（已按分排序，[0]=最优）
+let coachLast = null;       // 上一次出牌的教练点评（{gain,bestGain,optimal}）
+let coachHint = { hand: new Set(), table: new Set(), bestHand: new Set(), bestTable: new Set() };
+function loadCoach() {
+  try { if (typeof localStorage !== 'undefined' && localStorage.getItem('h14_coach') === '1') coachOn = true; } catch (e) {}
+}
+function updateCoachUI() {
+  const t = $('coachToggleStart'); if (t) { t.textContent = coachOn ? '开' : '关'; t.classList.toggle('on', coachOn); }
+  const b = $('coachBtn'); if (b) { b.classList.toggle('on', coachOn); b.setAttribute('aria-pressed', coachOn ? 'true' : 'false'); }
+}
+function setCoach(v) {
+  coachOn = !!v;
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem('h14_coach', coachOn ? '1' : '0'); } catch (e) {}
+  updateCoachUI();
+  if (coachOn) recomputeCoach(); else { coachMoves = []; coachHint = { hand: new Set(), table: new Set(), bestHand: new Set(), bestTable: new Set() }; }
+  renderCoach();
+  renderAll();
+}
+function recomputeCoach() {
+  coachHint = { hand: new Set(), table: new Set(), bestHand: new Set(), bestTable: new Set() };
+  coachLast = null;
+  if (!coachOn || !state || state.turn !== 'player' || state.phase !== 'playing' || ui.mode !== 'select') { coachMoves = []; renderCoach(); return; }
+  const moves = G.findMoves(state.playerHand, state.table);
+  if (moves.length === 0) {
+    const cheapest = state.playerHand.slice().sort(function (a, b) { return a.score - b.score; })[0];
+    if (cheapest) { coachHint.hand.add(cheapest.id); coachHint.bestHand.add(cheapest.id); }
+    coachMoves = [];
+  } else {
+    coachMoves = (G.rankMoves ? G.rankMoves(moves) : moves.slice().sort(function (a, b) { return G.sumScore(b.captured) - G.sumScore(a.captured); }));
+    coachStepIdx = 0;
+    coachMoves.forEach(function (m) {
+      m.handCards.forEach(function (c) { coachHint.hand.add(c.id); });
+      coachHint.table.add(m.tableCard.id);
+    });
+    if (coachMoves[0]) {
+      coachMoves[0].handCards.forEach(function (c) { coachHint.bestHand.add(c.id); });
+      coachHint.bestTable.add(coachMoves[0].tableCard.id);
+    }
+  }
+  renderCoach();
+}
+function applyCoachCombo(move) {
+  if (!move || ui.mode !== 'select' || state.turn !== 'player') return;
+  ui.selHand = move.handCards.map(function (c) { return c.id; });
+  ui.selTable = move.tableCard.id;
+  updateSelectSum();
+  snd('tap');
+  renderAll();
+}
+function renderCoach() {
+  const panel = $('coachPanel');
+  if (!panel) return;
+  if (!coachOn || !state || state.turn !== 'player' || state.phase !== 'playing') { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
+  if (ui.mode !== 'select' && ui.mode !== 'replace') { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
+  panel.classList.remove('hidden');
+  const stepBtn = '<button id="coachStepModeBtn" class="coach-stepmode' + (coachStepMode ? ' on' : '') + '">逐步讲解：' + (coachStepMode ? '开' : '关') + '</button>';
+  if (ui.mode === 'select') {
+    if (coachMoves.length === 0) {
+      const cheapest = state.playerHand.slice().sort(function (a, b) { return a.score - b.score; })[0];
+      panel.innerHTML = '<div class="coach-h">🧑‍🏫 教练 ' + stepBtn + '</div>' +
+        '<div class="coach-b">这回合手牌 + 桌面真凑不出 14，只能罚牌。建议罚最便宜的 <b>' + cardName(cheapest) + '</b>（扣分最少）——点它，再点「🚫 罚掉」。</div>';
+    } else if (coachStepMode) {
+      const i = Math.max(0, Math.min(coachStepIdx, coachMoves.length - 1));
+      const m = coachMoves[i];
+      const best = i === 0;
+      const txt = (coachMoves.length === 1) ? '就这么一种凑法' : ('第 ' + (i + 1) + ' / ' + coachMoves.length + ' 种');
+      panel.innerHTML = '<div class="coach-h">🧑‍🏫 教练 · ' + txt + ' ' + stepBtn + '</div>' +
+        '<div class="coach-b big">' + (best ? '<span class="rec">推荐</span> ' : '') + eqText(m.captured) + ' = 14，收走这组牌' + (best ? '（目前最划算）' : '') + '</div>' +
+        '<div class="coach-stepnav"><button id="coachPrev" class="coach-step">‹ 上一步</button>' +
+        '<button id="coachUse" class="coach-step use">就用这手出</button>' +
+        '<button id="coachNext" class="coach-step">下一步 ›</button></div>';
+    } else {
+      const rows = coachMoves.map(function (m, idx) {
+        const best = idx === 0;
+        return '<div class="coach-row' + (best ? ' best' : '') + '" data-idx="' + idx + '">' +
+          '<span class="coach-idx">' + (idx + 1) + '</span>' +
+          '<span class="coach-eq">' + eqText(m.captured) + ' = 14</span>' +
+          '<span class="coach-gain">' + (best ? '最划算' : '') + '</span>' +
+          (best ? '<span class="rec">推荐</span>' : '') + '</div>';
+      }).join('');
+      panel.innerHTML = '<div class="coach-h">🧑‍🏫 教练 · 本回合 ' + coachMoves.length + ' 种凑法（点任一行直接选）' + stepBtn + '</div>' +
+        '<div class="coach-rows">' + rows + '</div>';
+    }
+  } else if (ui.mode === 'replace') {
+    let body = '';
+    if (coachLast) {
+      body += '<div class="coach-prev">上回合这手' +
+        (coachLast.optimal ? '已经是最赚的 👍' : '不是最赚的——还有更赚的一手没选') + '</div>';
+    }
+    const judge = (A) ? A.judgeReplace(state.playerHand, state.table, [], null, { unknown: G.unknownPool(state), oppHandSize: state.npcHand.length }) : null;
+    if (judge && judge.suggest) {
+      const sc = judge.suggest;
+      const riskTxt = sc.cost <= 0.3 ? '几乎送不出去（最安全）' : (sc.cost <= 0.6 ? '被吃到的风险中等' : '被吃到的风险偏高');
+      const keepTxt = sc.path > 0 ? '留手上也还能凑牌' : '留手上基本没用';
+      body += '<div class="coach-b">收完要补 1 张到桌面。建议补 <b>' + cardName(sc.card) + '</b>：放它上桌' + riskTxt + '，而且' + keepTxt + '。点它就补这张。</div>';
+    }
+    panel.innerHTML = '<div class="coach-h">🧑‍🏫 教练 ' + stepBtn + '</div>' + body;
+  }
+  const sb = $('coachStepModeBtn'); if (sb) sb.onclick = function () { coachStepMode = !coachStepMode; if (coachStepMode) coachStepIdx = 0; renderCoach(); };
+  panel.querySelectorAll('.coach-row').forEach(function (r) { r.onclick = function () { const idx = parseInt(r.getAttribute('data-idx'), 10); if (!isNaN(idx)) applyCoachCombo(coachMoves[idx]); }; });
+  const pv = $('coachPrev'); if (pv) pv.onclick = function () { coachStepIdx = Math.max(0, coachStepIdx - 1); renderCoach(); };
+  const nx = $('coachNext'); if (nx) nx.onclick = function () { coachStepIdx = Math.min(coachMoves.length - 1, coachStepIdx + 1); renderCoach(); };
+  const cu = $('coachUse'); if (cu) cu.onclick = function () { const i = Math.max(0, Math.min(coachStepIdx, coachMoves.length - 1)); applyCoachCombo(coachMoves[i]); };
+}
+
+
+// 难度（仅影响 NPC；含手机整体降一档；难/地狱的强度由「学习系统」个性化）
 let npcDifficulty = 'medium';
 let firstMoveRandom = true;
 const DIFF_DESC = {
@@ -37,57 +147,247 @@ const DIFF_DESC = {
   medium: '中等：NPC 一步贪心，盯着当下最赚的走。',
   hard: '难：NPC 出牌照贪心，但补到桌面那张专挑"最不喂你"的。',
   hell: '地狱：NPC 每种打法都推演到终局再挑，几乎算死你。',
-  adaptive: '自适应：跟着你的战绩自动升降档，目标是一直把你卡在五五开。',
 };
-const diffLabel = (d) => ({ easy: '容易', medium: '中等', hard: '难', hell: '地狱', adaptive: '自适应' }[d] || d);
+const diffLabel = (d) => ({ easy: '容易', medium: '中等', hard: '难', hell: '地狱' }[d] || d);
 
-// ---------- 自适应难度（纯本地统计，无模型） ----------
-const ADAPT_W = 4;
-let adaptLevel = 1;
-let adaptHist = [];
-function loadAdapt() {
+// ---------- NPC 学习系统（只学"你赢"的局；难/地狱个性化，易/中永不学） ----------
+// 打法：赢局里你的每一手，都交给引擎自己的终局推演当裁判。只有"你那手推演出来比引擎当时那手
+// 明显更赚"的才算一个洞，再按它落在哪条轴上给对应权重投一票，票数够了才动一点点。
+// 所以学的是"引擎哪条轴判偏了、该往哪偏"，不是把具体牌面抄下来。
+const LEARN_KEY = 'h14_learn_v1';
+const LEARN_STEP = { hard: 0.03, hell: 0.06 };   // 难=轻调、地狱=重调（易/中为 0，永不学）
+const LEARN_CLAMP = { keepW: [0, 3], playW: [0.2, 1.6] };
+const LEARN_MARGIN = 0.5;    // 一手要"明显更赚"（≥0.5 分）才算洞，避免噪声投票
+const LEARN_MAX_DEC = 120;   // 每局最多留多少个决策点（防内存膨胀）
+let learned = {
+  v: 1,
+  weights: null,                                 // 学习后的权重；null = 还没学到东西（等于出厂默认）
+  stats: { hard: { w: 0, l: 0 }, hell: { w: 0, l: 0 } },
+  reviewed: 0,                                   // 已复盘（赢局）数
+  holes: { play: 0, rep: 0, pen: 0 },            // 累计"引擎被你反超"处数
+  drift: 0,                                      // 累计调参次数
+  log: [],                                       // 最近 5 条人类可读说明
+};
+let decideLog = [];       // 本局玩家决策快照（只在内存里，不落盘）
+let pendingPlay = null;   // 上一次出牌的决策快照（补牌轴要跟它配对）
+
+function loadLearn() {
   try {
     if (typeof localStorage === 'undefined') return;
-    const lv = parseInt(localStorage.getItem('h14_adapt_lv'), 10);
-    if (lv >= 0 && lv <= 3) adaptLevel = lv;
-    const h = JSON.parse(localStorage.getItem('h14_adapt_hist') || '[]');
-    if (Array.isArray(h)) adaptHist = h.filter((x) => x === 'w' || x === 'l' || x === 'd').slice(-ADAPT_W);
+    const raw = localStorage.getItem(LEARN_KEY);
+    if (!raw) return;
+    const o = JSON.parse(raw);
+    if (!o || o.v !== 1) return;
+    if (o.weights) learned.weights = o.weights;
+    if (o.stats) learned.stats = o.stats;
+    if (typeof o.reviewed === 'number') learned.reviewed = o.reviewed;
+    if (o.holes) learned.holes = o.holes;
+    if (typeof o.drift === 'number') learned.drift = o.drift;
+    if (Array.isArray(o.log)) learned.log = o.log.slice(-5);
   } catch (e) {}
 }
-function saveAdapt() {
+function saveLearn() {
   try {
     if (typeof localStorage === 'undefined') return;
-    localStorage.setItem('h14_adapt_lv', String(adaptLevel));
-    localStorage.setItem('h14_adapt_hist', JSON.stringify(adaptHist));
+    localStorage.setItem(LEARN_KEY, JSON.stringify(learned));
   } catch (e) {}
 }
-function adaptFeed(result) {
-  adaptHist.push(result);
-  if (adaptHist.length > ADAPT_W) adaptHist = adaptHist.slice(-ADAPT_W);
-  let moved = 0;
-  if (adaptHist.length >= ADAPT_W) {
-    const w = adaptHist.filter((x) => x === 'w').length;
-    const l = adaptHist.filter((x) => x === 'l').length;
-    if (w >= 3 && adaptLevel < 3) { adaptLevel++; moved = 1; }
-    else if (l >= 3 && adaptLevel > 0) { adaptLevel--; moved = -1; }
+// 学习强度：容易/中等 = 0（永不学、永远出厂强度）；难 = 0.5（只吃一半）；地狱 = 1（全量）
+function learnIntensity(sel) { return sel === 'hell' ? 1 : sel === 'hard' ? 0.5 : 0; }
+function learningArmed() { return learnIntensity(npcDifficulty) > 0; }
+function applyLearnWeights(sel) {
+  if (!G || !G.setNpcWeights || !G.DEFAULT_WEIGHTS) return;
+  const t = learnIntensity(sel);
+  if (!t || !learned.weights) { G.setNpcWeights(G.DEFAULT_WEIGHTS); return; }
+  const out = {};
+  Object.keys(G.DEFAULT_WEIGHTS).forEach((k) => {
+    const d = G.DEFAULT_WEIGHTS[k];
+    const v = (learned.weights[k] === undefined ? d : learned.weights[k]);
+    out[k] = Math.round((d + (v - d) * t) * 1000) / 1000;
+  });
+  G.setNpcWeights(out);
+}
+function learnSnapshot() {
+  const d = G.DEFAULT_WEIGHTS;
+  const lt = learned.weights || d;
+  const t = learnIntensity(npcDifficulty);
+  const out = {};
+  Object.keys(d).forEach((k) => { out[k] = Math.round((d[k] + (lt[k] - d[k]) * t) * 1000) / 1000; });
+  return { base: d, learned: lt, applied: out, intensity: t };
+}
+function pushDecide(rec) { if (decideLog.length < LEARN_MAX_DEC) decideLog.push(rec); }
+function recordPlayDecision(move) {
+  if (!learningArmed() || !G.cloneState) return;
+  const rec = { k: 'play', st: G.cloneState(state), handIds: move.handCards.map((c) => c.id), tableId: move.tableCard.id };
+  pushDecide(rec);
+  pendingPlay = rec;
+}
+function recordReplaceDecision(cardId) {
+  if (!learningArmed() || !pendingPlay) return;
+  pushDecide({ k: 'rep', st: pendingPlay.st, handIds: pendingPlay.handIds, tableId: pendingPlay.tableId, cardId: cardId });
+  pendingPlay = null;
+}
+function recordPenaltyDecision(cardId) {
+  if (!learningArmed() || !G.cloneState) return;
+  pushDecide({ k: 'pen', st: G.cloneState(state), cardId: cardId });
+}
+function findMoveBy(moves, handIds, tableId) {
+  for (const mv of moves) {
+    if (mv.tableCard.id !== tableId) continue;
+    const ids = mv.handCards.map((c) => c.id);
+    if (ids.length === handIds.length && ids.every((x) => handIds.indexOf(x) >= 0)) return mv;
   }
-  saveAdapt();
-  return moved;
+  return null;
 }
-function adaptSummary() {
-  const n = adaptHist.length;
-  if (!n) return '还没打够，先按中等';
-  const w = adaptHist.filter((x) => x === 'w').length;
-  const l = adaptHist.filter((x) => x === 'l').length;
-  return '近 ' + n + ' 局 ' + w + ' 胜 ' + l + ' 负';
+// 罚牌没有 move，不能用 evalMoveRollout → 罚掉这张后贪心推演到终局，取"我"的净分差
+function penValue(st, cardId) {
+  const s2 = G.cloneState(st);
+  G.penalty(s2, 'player', cardId);
+  s2.turn = 'npc';
+  return Math.round(G.playOutGreedy(s2, 'player') * 100) / 100;
+}
+// 复盘本局。返回到结算层显示的一行说明（无学习则为空串）
+function runLearn(ps, ns) {
+  const sel = npcDifficulty;
+  const st = learned.stats[sel];
+  if (!st) { decideLog = []; pendingPlay = null; return ''; }
+  if (ps > ns) st.w++; else if (ns > ps) st.l++;
+  const won = ps > ns;
+  let note = '';
+  if (learningArmed() && won && decideLog.length) {
+    const votes = { keepUp: 0, keepDown: 0, deadUp: 0, deadDown: 0 };
+    const holes = { play: 0, rep: 0, pen: 0 };
+    for (const d of decideLog) {
+      try {
+        if (d.k === 'play') {
+          const moves = G.findMoves(d.st.playerHand, d.st.table);
+          if (!moves.length) continue;
+          const mine = findMoveBy(moves, d.handIds, d.tableId);
+          const eng = G.rankMoves(moves)[0];
+          if (!mine || !eng) continue;
+          // 两臂都用 null（都交给自动补牌）：只让"出哪一手"这一个变量不同，才是配对比较
+          if (G.evalMoveRollout(d.st, 'player', mine, null) > G.evalMoveRollout(d.st, 'player', eng, null) + LEARN_MARGIN) holes.play++;
+        } else if (d.k === 'rep') {
+          const moves = G.findMoves(d.st.playerHand, d.st.table);
+          const mv = findMoveBy(moves, d.handIds, d.tableId);
+          if (!mv) continue;
+          const engId = G.netReplaceId(d.st, 'player', mv);
+          if (!engId || engId === d.cardId) continue;
+          if (G.evalMoveRollout(d.st, 'player', mv, d.cardId) > G.evalMoveRollout(d.st, 'player', mv, engId) + LEARN_MARGIN) {
+            holes.rep++;
+            const c1 = d.st.playerHand.find((x) => x.id === d.cardId);
+            const c2 = d.st.playerHand.find((x) => x.id === engId);
+            if (c1 && c2) {
+              const k1 = G.keepValue(c1, d.st), k2 = G.keepValue(c2, d.st);
+              if (k1 < k2) votes.keepUp++; else if (k1 > k2) votes.keepDown++;
+            }
+          }
+        } else if (d.k === 'pen') {
+          if (G.findMoves(d.st.playerHand, d.st.table).length) continue;   // 引擎这手会出牌 → 不是同一分支
+          const eng = G.chooseAction(d.st, 'player', { difficulty: 'hell' });
+          if (!eng || eng.type !== 'penalty' || eng.cardId === d.cardId) continue;
+          if (penValue(d.st, d.cardId) > penValue(d.st, eng.cardId) + LEARN_MARGIN) {
+            holes.pen++;
+            const c1 = d.st.playerHand.find((x) => x.id === d.cardId);
+            const c2 = d.st.playerHand.find((x) => x.id === eng.cardId);
+            if (c1 && c2) {
+              const p1 = G.playability(d.st, c1), p2 = G.playability(d.st, c2);
+              if (p1 < p2) votes.deadUp++; else if (p1 > p2) votes.deadDown++;
+            }
+          }
+        }
+      } catch (e) { /* 单个决策点出错不影响整局复盘 */ }
+    }
+    learned.reviewed++;
+    learned.holes.play += holes.play; learned.holes.rep += holes.rep; learned.holes.pen += holes.pen;
+    const step = LEARN_STEP[sel] || 0;
+    const w = Object.assign({}, G.DEFAULT_WEIGHTS, learned.weights || {});
+    const parts = [];
+    const kd = votes.keepUp - votes.keepDown;
+    if (kd) {
+      const r = LEARN_CLAMP.keepW;
+      w.keepW = Math.max(r[0], Math.min(r[1], Math.round((w.keepW + step * (kd > 0 ? 1 : -1)) * 1000) / 1000));
+      parts.push(kd > 0 ? '补牌更敢甩负担' : '补牌别急着甩负担');
+    }
+    const pd = votes.deadUp - votes.deadDown;
+    if (pd) {
+      const r = LEARN_CLAMP.playW;
+      w.playW = Math.max(r[0], Math.min(r[1], Math.round((w.playW + step * (pd > 0 ? 1 : -1)) * 1000) / 1000));
+      parts.push(pd > 0 ? '罚牌更先扔死牌' : '罚牌别只看死没死');
+    }
+    if (parts.length) {
+      learned.weights = w; learned.drift++;
+      learned.log.push(new Date().toISOString().slice(0, 10) + ' 赢下' + diffLabel(sel) + '，调整：' + parts.join('、'));
+      if (learned.log.length > 5) learned.log = learned.log.slice(-5);
+    }
+    saveLearn();
+    note = '🧠 本局复盘：引擎被你反超 ' + (holes.play + holes.rep + holes.pen) + ' 处（出牌 ' + holes.play
+      + ' · 补牌 ' + holes.rep + ' · 罚牌 ' + holes.pen + '）'
+      + (parts.length ? '，已微调：' + parts.join('、') : '（没到调参门槛）');
+  } else if (learningArmed()) {
+    saveLearn();
+    note = won ? '🧠 本局赢了，但可复盘的手太少' : '🧠 只学你赢的局：本局没赢 → 不记入权重（只记战绩）';
+  }
+  decideLog = []; pendingPlay = null;
+  return note;
+}
+function learnSummaryText() {
+  const s = learned.stats, w = learned.weights, sl = learnSnapshot();
+  const f = (k, o) => k + ' ' + Number(o[k]).toFixed(2);
+  const keys = Object.keys(G.DEFAULT_WEIGHTS);
+  return '战绩：难 ' + s.hard.w + '胜' + s.hard.l + '负 · 地狱 ' + s.hell.w + '胜' + s.hell.l + '负 · 已复盘 ' + learned.reviewed + ' 局\n'
+    + '引擎被反超：出牌 ' + learned.holes.play + ' 次（仅记录）· 补牌 ' + learned.holes.rep + ' · 罚牌 ' + learned.holes.pen + '\n'
+    + (w ? '学习后权重：' + keys.map((k) => f(k, w)).join(' / ') + '\n' : '还没学到东西：权重 = 出厂默认\n')
+    + '本档实际生效（强度 ' + sl.intensity + '）：' + keys.map((k) => f(k, sl.applied)).join(' / ');
+}
+function renderLearn() {
+  const body = $('learnBody');
+  if (body) body.textContent = learnSummaryText() + (learned.log.length ? '\n\n最近调整：\n' + learned.log.join('\n') : '');
+  const ta = $('learnOut');
+  if (ta && 'value' in ta) { ta.value = ''; if (ta.classList) ta.classList.remove('show'); }
+}
+function openLearn() {
+  const m2 = $('learnModal');
+  if (m2 && m2.classList) m2.classList.remove('hidden');
+  renderLearn();
+}
+function closeLearn() {
+  const m2 = $('learnModal');
+  if (m2 && m2.classList) m2.classList.add('hidden');
+}
+function exportLearn() {
+  const payload = {
+    v: 1, note: '学习系统导出：weights 即"被玩家教过一轮"的权重，可直接写进 game-core.js 的 DEFAULT_WEIGHTS',
+    weights: learned.weights, defaultWeights: G.DEFAULT_WEIGHTS, stats: learned.stats,
+    reviewed: learned.reviewed, holes: learned.holes, drift: learned.drift, log: learned.log,
+  };
+  const txt = JSON.stringify(payload, null, 2);
+  const ta = $('learnOut');
+  if (ta && 'value' in ta) { ta.value = txt; if (ta.classList) ta.classList.add('show'); if (ta.select) ta.select(); }
+  try {
+    // writeText 返回 Promise：在非安全上下文/无权限时会被拒（未接 .catch 会变成未捕获异常）
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      const p = navigator.clipboard.writeText(txt);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+  } catch (e) {}
+  return txt;
+}
+function resetLearn() {
+  learned = {
+    v: 1, weights: null, stats: { hard: { w: 0, l: 0 }, hell: { w: 0, l: 0 } },
+    reviewed: 0, holes: { play: 0, rep: 0, pen: 0 }, drift: 0, log: [],
+  };
+  saveLearn();
+  applyLearnWeights(npcDifficulty);
+  renderLearn();
 }
 
 // 手机版整体降一档：构建时注入 window.H14_EASY_SHIFT=1 才生效；桌面版/小程序无此标记，零变化
 const H14_SHIFT = (typeof window !== 'undefined' && window.H14_EASY_SHIFT)
   ? { hell: 'hard', hard: 'medium', medium: 'easy', easy: 'easy' } : null;
 function effectiveDifficulty() {
-  const d = (npcDifficulty !== 'adaptive') ? npcDifficulty
-    : ((G && G.BASE_DIFFICULTIES && G.BASE_DIFFICULTIES[adaptLevel]) || 'medium');
+  const d = npcDifficulty;
   return (H14_SHIFT && H14_SHIFT[d]) || d;
 }
 
@@ -248,6 +548,8 @@ function pulseEl(id, cls) {
 
 // ---------- 流程 ----------
 function newGame() {
+  applyLearnWeights(npcDifficulty);   // 易/中=出厂权重；难吃一半、地狱全量（只有这两档会学）
+  decideLog = []; pendingPlay = null;
   state = G.createGame({ numDecks: 2, firstRandom: firstMoveRandom });
   episode++;
   ui.selHand = []; ui.selTable = null; ui.noMoves = false; ui.mergePlan = null; ui.penPlan = null;
@@ -256,7 +558,8 @@ function newGame() {
   hideNpcShow();
   setNpcMood('idle');
   hideNpcBubble();
-  const dl = (npcDifficulty === 'adaptive') ? ('自适应·' + diffLabel(effectiveDifficulty())) : diffLabel(npcDifficulty);
+  const eSh = H14_SHIFT && H14_SHIFT[npcDifficulty];
+  const dl = diffLabel(npcDifficulty) + (eSh && eSh !== npcDifficulty ? '·实按' + diffLabel(eSh) : '');
   setMessage('🎴 新一局开始！' + (state.turn === 'player' ? '你先手' : 'NPC 先手') + '（难度：' + dl + '）');
   announceFirst();
   snd('deal'); snd('start');
@@ -292,6 +595,7 @@ function playerTurnStart() {
   ui.mode = 'select';
   ui.noMoves = moves.length === 0;
   setMessage('轮到你出牌：点手牌，凑成 14 就确认。');
+  recomputeCoach();
   renderControls();
   renderAll();
 }
@@ -311,12 +615,12 @@ function onHandClick(card) {
     if (judge && state.turn === 'player' && judge.chosen) {
       const mine = judge.chosen, alt = judge.suggest;
       if (!judge.optimal && alt) {
-        const desc = (x) => '「' + cardName(x.card) + '」期望送 ' + x.cost.toFixed(2) + ' 分' +
-          (x.path > 0 ? '，留手上还能赚 ' + x.path.toFixed(2) + ' 分' : '（留手上也没用）');
-        toast('💡 换个思路：「' + cardName(alt.card) + '」净收益 ' + alt.net.toFixed(2) +
-          ' 分，你这张 ' + mine.net.toFixed(2) + ' 分', 'warn');
+        const riskTxt = (x) => x.cost <= 0.3 ? '几乎送不出去' : (x.cost <= 0.6 ? '有点风险' : '风险偏高');
+        const keepTxt = (x) => x.path > 0 ? '留手上还能凑牌' : '留手上没用';
+        toast('💡 换个思路：补「' + cardName(alt.card) + '」比你现在这张更稳——它' + riskTxt(alt) + '、' + keepTxt(alt) + '；你选的这张' + riskTxt(mine) + '、' + keepTxt(mine), 'warn');
       }
     }
+    recordReplaceDecision(card.id);
     const before = state.playerHand.map((c) => c.id);
     G.replaceAndRefill(state, 'player', card.id);
     const r = refillInfo('player', before);
@@ -361,6 +665,8 @@ function confirmMatch() {
   if (judge && !judge.optimal && judge.best) {
     toast('💡 还有更赚的：' + eqText(judge.best.captured) + ' = 14（+' + judge.bestGain.toFixed(2) + ' 分）', 'warn');
   }
+  if (coachOn && judge) coachLast = { gain: judge.gain, bestGain: judge.bestGain, optimal: judge.optimal };
+  if (coachOn) coachHint = { hand: new Set(), table: new Set(), bestHand: new Set(), bestTable: new Set() };
   snd('flip');
 
   ui.mode = 'merging';
@@ -383,6 +689,7 @@ function confirmMatch() {
 }
 
 function finishPlayerMerge(move, gain) {
+  recordPlayDecision(move);
   G.capture(state, 'player', move);
   ui.selHand = []; ui.selTable = null; ui.valid = false;
   const gotJoker = move.captured.some((c) => c.isJoker);
@@ -405,6 +712,7 @@ function finishPlayerMerge(move, gain) {
   } else {
     ui.mode = 'replace';
     setMessage('✅ 匹配成功！点 1 张手牌补到桌面，之后自动从补牌堆补满手牌。');
+    renderCoach();
     renderAll(); renderControls();
   }
 }
@@ -427,6 +735,7 @@ function doPenalty() {
   setTimeout(() => {
     if (ep !== episode) return;
     ui.penPlan = null;
+    recordPenaltyDecision(card.id);
     const before = state.playerHand.map((c) => c.id);
     G.penalty(state, 'player', card.id);
     const r = refillInfo('player', before);
@@ -595,8 +904,7 @@ function showOver() {
   const winner = ps > ns ? '🎉 你赢了！' : ns > ps ? '🤖 NPC 赢了' : '🤝 平局！';
   const line = A ? A.npcSay(ps < ns ? 'overWin' : ps > ns ? 'overLose' : 'overDraw') : null;
   setNpcMood(ps < ns ? 'greedy' : ps > ns ? 'sad' : 'shock');
-  let adaptMoved = 0;
-  if (npcDifficulty === 'adaptive') adaptMoved = adaptFeed(ps > ns ? 'w' : ps < ns ? 'l' : 'd');
+  const learnNote = runLearn(ps, ns);   // 只学"你赢"的局；易/中不学
 
   const fmt = (arr) => arr.length ? arr.map((c) => c.label).join('、') : '（无）';
 
@@ -608,7 +916,7 @@ function showOver() {
     (line ? '<div class="over-say">🤖 NPC：「' + line.text + '」</div>' : '') +
     scoreSummary('你', state.playerLoot, state.playerPenalty, ps) +
     scoreSummary('NPC', state.npcLoot, state.npcPenalty, ns) +
-    (npcDifficulty === 'adaptive' ? '<div class="over-rate">🎚 自适应：' + adaptSummary() + ' · 当前按「' + diffLabel(effectiveDifficulty()) + '」打' + (adaptMoved > 0 ? '（升档了）' : adaptMoved < 0 ? '（降档了）' : '') + '</div>' : '') +
+    (learnNote ? '<div class="over-rate">' + learnNote + '</div>' : '') +
     '<details><summary>查看双方全部牌面</summary>' +
     '<div>你的战利品：' + fmt(state.playerLoot) + '</div>' +
     '<div>你的罚牌：' + fmt(state.playerPenalty) + '</div>' +
@@ -666,6 +974,9 @@ function renderAll() {
     } else if (state.turn === 'player' && ui.mode === 'select' && ui.selTable === c.id) {
       el.classList.add('selected', 'ringed');
       if (!ui.valid) el.classList.add('ring-bad');
+    } else if (coachOn && coachHint.table.has(c.id)) {
+      el.classList.add('coach-hint');
+      if (coachHint.bestTable.has(c.id)) el.classList.add('coach-hint-best');
     }
     el.addEventListener('click', () => onTableClick(c));
     t.appendChild(el);
@@ -680,6 +991,7 @@ function renderAll() {
     if (plan && plan.stage === 'merge' && plan.handIds.indexOf(c.id) >= 0) el.classList.add('merge-to');
     else if (ui.penPlan === c.id) el.classList.add('penalty-out');
     else if ((ui.mode === 'select' || ui.mode === 'replace') && ui.selHand.includes(c.id)) el.classList.add('selected');
+    else if (coachOn && coachHint.hand.has(c.id)) { el.classList.add('coach-hint'); if (coachHint.bestHand.has(c.id)) el.classList.add('coach-hint-best'); }
     el.addEventListener('click', () => onHandClick(c));
     ph.appendChild(el);
   });
@@ -757,13 +1069,10 @@ function renderDiff() {
   }
   const el = $('diffDesc');
   if (!el) return;
-  if (npcDifficulty === 'adaptive') {
-    el.textContent = '自适应：' + adaptSummary() + ' · 当前按「' + diffLabel(effectiveDifficulty()) + '」打（赢多了自动升、输多了自动降）';
-  } else {
-    const sh = H14_SHIFT && H14_SHIFT[npcDifficulty];
-    el.textContent = (DIFF_DESC[npcDifficulty] || '')
-      + (sh && sh !== npcDifficulty ? '（手机版整体降一档，实际按「' + diffLabel(sh) + '」打）' : '');
-  }
+  const sh = H14_SHIFT && H14_SHIFT[npcDifficulty];
+  el.textContent = (DIFF_DESC[npcDifficulty] || '')
+    + (sh && sh !== npcDifficulty ? '（手机版整体降一档，实际按「' + diffLabel(sh) + '」打）' : '')
+    + (learningArmed() ? '　🧠 这档跟着你的学习记录走（已调 ' + learned.drift + ' 次）' : '　🧠 这档固定，不参与学习');
 }
 
 // ---------- 开局难度询问 ----------
@@ -921,13 +1230,17 @@ if (document.readyState === 'loading') {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadAdapt();
+  loadLearn();
   loadPersistDiff();
   loadAskDiff();
+  loadCoach();
+  updateCoachUI();
   const hb = $('helpBtn'); if (hb && hb.addEventListener) hb.addEventListener('click', showHelp);
   const hc = $('helpClose'); if (hc && hc.addEventListener) hc.addEventListener('click', hideHelp);
   firstRunPending = !getSeenHelp();
   const ng = $('newGame'); if (ng && ng.addEventListener) ng.addEventListener('click', onRestartClick);
+  const ct = $('coachToggleStart'); if (ct && ct.addEventListener) ct.addEventListener('click', function () { setCoach(!coachOn); });
+  const cbtn = $('coachBtn'); if (cbtn && cbtn.addEventListener) cbtn.addEventListener('click', function () { setCoach(!coachOn); });
   const on = $('overNew'); if (on && on.addEventListener) on.addEventListener('click', restartSame);
   const rc = $('restartCancel'); if (rc && rc.addEventListener) rc.addEventListener('click', closeRestartConfirm);
   const ro = $('restartOk'); if (ro && ro.addEventListener) ro.addEventListener('click', confirmRestart);
@@ -944,6 +1257,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   const ag = $('askDiffGo'); if (ag && ag.addEventListener) ag.addEventListener('click', confirmDiffAsk);
+  const lb = $('learnBtn'); if (lb && lb.addEventListener) lb.addEventListener('click', openLearn);
+  const lc = $('learnClose'); if (lc && lc.addEventListener) lc.addEventListener('click', closeLearn);
+  const le = $('learnExport'); if (le && le.addEventListener) le.addEventListener('click', exportLearn);
+  const lr = $('learnReset'); if (lr && lr.addEventListener) lr.addEventListener('click', resetLearn);
   const an = $('askDiffNever'); if (an && an.addEventListener) an.addEventListener('change', () => setAskDiff(!an.checked));
   const sg = $('startGo'); if (sg && sg.addEventListener) sg.addEventListener('click', beginFromStart);
   const sh = $('startHelp'); if (sh && sh.addEventListener) sh.addEventListener('click', showHelp);

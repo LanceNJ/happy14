@@ -40,6 +40,10 @@
         </div>
         <button id="startGo" class="ss-go">开始游戏</button>
         <button id="startHelp" class="ss-help">玩法说明</button>
+        <div class="ss-coach">
+          <span>🧑‍🏫 新手辅导（带练）</span>
+          <button id="coachToggleStart" class="toggle">关</button>
+        </div>
         <div id="visitStatStart" class="visit-stat ss-stat"></div>
         <div class="ss-foot">一副牌 · 两个人 · 一局三分钟</div>
       </div>
@@ -54,6 +58,8 @@
         <span class="npc">NPC <b id="scoreNpc">0.00</b></span>
       </div>
       <div class="acts">
+        <button id="learnBtn" class="icon" aria-label="NPC 学习">🧠</button>
+        <button id="coachBtn" class="icon" aria-label="新手辅导">🧑‍🏫</button>
         <button id="helpBtn" class="icon" aria-label="玩法">?</button>
         <button id="newGame" class="icon" aria-label="重开">↻</button>
       </div>
@@ -76,6 +82,9 @@
       <div id="table" class="cards"></div>
       <div id="message" class="msg"></div>
     </section>
+
+    <!-- 教练面板（新手辅导带练，默认隐藏） -->
+    <div id="coachPanel" class="coach-panel hidden"></div>
 
     <!-- 我的区 -->
     <section id="myArea">
@@ -110,8 +119,7 @@
           <button class="diff-btn" data-diff="medium">中等</button>
           <button class="diff-btn" data-diff="hard">难</button>
           <button class="diff-btn" data-diff="hell">地狱</button>
-          <button class="diff-btn" data-diff="adaptive">自适应</button>
-        </div>
+          </div>
         <p id="askDiffDesc" class="desc"></p>
         <label class="never"><input type="checkbox" id="askDiffNever" /> 以后别再问</label>
         <button id="askDiffGo" class="go">开 始</button>
@@ -139,6 +147,21 @@
       </div>
     </div>
 
+    <!-- NPC 学习（只学"你赢"的局；难/地狱个性化） -->
+    <div id="learnModal" class="modal hidden">
+      <div class="box">
+        <h2>🧠 NPC 学习</h2>
+        <p class="desc">只有你<b>赢下「难 / 地狱」</b>的局才会被复盘。复盘时，你的每一手都交给引擎自己的终局推演当裁判 —— 只有"你那手明显更赚"才算它被你反超，再据此微调它的权重。容易 / 中等永远不学，强度固定。</p>
+        <pre id="learnBody" class="learn-body"></pre>
+        <textarea id="learnOut" class="learn-out" readonly placeholder=""></textarea>
+        <div class="learn-actions">
+          <button id="learnExport" class="go ghost">导出权重</button>
+          <button id="learnReset" class="go ghost">重置学习</button>
+          <button id="learnClose" class="go">关 闭</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 玩法说明（赔率 / 提示 / 难度说明都收在这里） -->
     <div id="helpModal" class="modal hidden">
       <div class="box">
@@ -153,7 +176,7 @@
           ① 点你的手牌 + 点桌面 1 张牌；加起来 = 14 → 点「✅ 确认匹配」收走。<br />
           ② 凑不出 14？只点 1 张手牌，再点「🚫 罚掉这张」，丢 1 张（隐藏，扣分）。</p>
           <p><b>收牌之后</b>：你挑 1 张手牌补回桌面（决定给对手留什么），其余自动从补牌堆补满到 4 张。</p>
-          <p><b>难度（开局选，五档）</b>：容易=大半随机、常送高分牌；中等=一步贪心；难=出牌贪心但补牌不喂你；地狱=每种打法推演到终局；自适应=跟着你的战绩自动升降档，目标把你卡在五五开。</p>
+          <p><b>难度（开局选，四档）</b>：容易=大半随机、常送高分牌；中等=一步贪心；难=出牌贪心但补牌不喂你；地狱=每种打法推演到终局。<b>难 / 地狱会跟着你的学习记录变强</b>（只学你赢的局，见顶部 🧠），容易 / 中等永远固定。</p>
           <p><b>NPC（圆滚滚小可爱）</b>：每轮先指牌、再亮牌告诉你它凑成了 14，重要时候会说句场面话。</p>
           <p><b>残局与结算</b>：补牌堆抓完，手牌只减不增，直到双方都打不出、手牌耗尽。得分 = 战利品合计 − 罚牌合计，高者胜。</p>
         </div>

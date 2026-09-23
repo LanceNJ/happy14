@@ -42,6 +42,7 @@ happy14/
 ├── sim-test.js         # 引擎测试：2000 局，无异常 + 牌数守恒 + 均衡性
 ├── ui-test.js          # Web/Electron 界面冒烟测试（DOM 桩 + 浏览器模式 vm 双跑）
 ├── mini-test.js        # 小程序界面冒烟测试（Page/wx 桩）
+├── mobile-test.js      # 【真实浏览器】手机版构建产物真跑（Playwright）：四档/学习系统/整局真打
 ├── difficulty-lab.js   # 【难度校准台】正确轮流的沙盒，配对发牌横向比对各档强度
 ├── tools-diag.js       # 【真实浏览器】布局诊断：逐块量高，抓"谁超出视口"
 ├── tools-shot.js       # 【真实浏览器】多尺寸截图（无头 Chrome）
@@ -76,6 +77,10 @@ $N sim-test.js    # 引擎：2000 局
 $N ui-test.js     # Web 界面：273 项
 $N mini-test.js   # 小程序界面：223 项
 $N style-check.js # 两版色板对齐（ui/mini 各自也调）
+
+# 手机版构建产物真跑（Playwright，需 NODE_PATH 指向已装 playwright 的隔离目录）
+#   NODE_PATH=C:/Users/Gary/.workbuddy/binaries/node/workspace/node_modules node mobile-test.js
+$N mobile-test.js # 手机版：四档 / 学习系统 / 面板可开 / 整局真打 / 零报错
 
 # 真实浏览器验证（改 CSS/布局必跑，桩测试测不出布局问题）
 $N tools-diag.js      # 逐块量高，输出"谁超出视口"
@@ -228,7 +233,33 @@ $N difficulty-lab.js 200 gcEasy,gcMedium,gcHard,gcHell
 ## 八、可选的下一步
 
 - 联机对战（当前单机）
-- ~~自适应难度~~ ✅ 本轮已做（第五档「自适应」：近 4 局窗口赢≥3 升/输≥3 降，纯本地统计）
+- ~~自适应难度~~ ❌ **已于 2026-09-23 整体退役**（第五档拆掉，内核回到四档；位置让给 🧠 学习系统，见 §九）
 - 战绩统计 / 自定义副数
 - 若继续调难度：`difficulty-lab.js` 里还留着若干候选策略（`defHonHard`/`defRoll`/`many30def`/`net*` 系列等）可直接跑比对
 - 把 `tools-verify.js` 的取数逻辑按 `tools-bubble.js` 的写法修稳
+
+## 九、NPC 学习系统 + 四档（2026-09-23 上线，替换"自适应"）
+
+**一句话**：NPC 不再靠"升降档"把你卡在五五开，改成**只学你赢的局**、用**引擎自己的推演当裁判**，把每次你打得比引擎好的地方记下来，微调两个权重。
+
+### 规则（全部在手机版 `mobile/mobile.js`）
+- **只学你赢的局**：输局只记战绩、不动权重。
+- **引擎当裁判**：拿你实际出的那一手 vs `rankMoves` 首选，在同一起点上比 `evalMoveRollout`（配对补牌，两臂都传 `null` 交给自动补牌）。
+- **按轴投票**：出牌轴 `holes.play` **只记录不调参**；补牌轴 `holes.rep` 动 `keepW`；罚牌轴 `holes.pen` 动 `playW`。每局最多调一步。
+- **常量**：`LEARN_STEP{hard:0.03,hell:0.06}`、`LEARN_CLAMP{keepW:[0,3],playW:[0.2,1.6]}`、`LEARN_MARGIN 0.5`、`LEARN_MAX_DEC 120`。
+- **强度**：容易/中等 = 0（**永不学**，保持出厂手感）；难 = 0.5（吃出厂与学习值的中点）；地狱 = 1（全量）。`applyLearnWeights` 按 `d+(v-d)*t` 插值后 `G.setNpcWeights`。
+- **存储**：`localStorage.h14_learn_v1`；头部 🧠 面板可看/导出/重置。**不联网、不上报**。
+- **回流（人工单源蒸馏）**：打赢难/地狱 → 🧠 面板点「导出权重」→ JSON 发给 AI → AI 写进 `game-core.js` 的 `DEFAULT_WEIGHTS` → 重新构建部署（链接不变）。
+
+### 四条"改前必读"的坑
+1. **`page.click` 不能用来驱动游戏**（`mobile-test.js` 首版踩）：碰到 `disabled` 按钮会**静默等 30s**，90 拍循环一局拖 12 分钟。改成在 `page.evaluate` 里直调控制器自己的 `confirmMatch/doPenalty/onHandClick`，配 `page.setDefaultTimeout(20000)` + stall 检测。
+2. **`after()` 是顶层函数声明 ⇒ 就是 `window.after`，可覆写**：`window.after=(ms,fn)=>setTimeout(fn,Math.min(ms,8))` 把 NPC 五拍演出（4.2s/回合）压到近 0；`T_*` 是 `const` 覆盖不了（玩家合牌那 1.1s 仍真等）。
+3. **删 CSS 也要重建**：本轮残留过 `.diff-seg .diff-btn[data-diff="adaptive"]` 一条死规则（扫 HTML 查不出来，得搜 CSS）。
+4. **`navigator.clipboard.writeText` 会返回 Promise**，未接 `.catch` 会变成未捕获异常（file:// / http 下必现）→ 导出按钮已加 `.catch(()=>{})`。
+
+### 构建产物与分发（改完必须一起刷）
+构建只产出 `欢乐十四分-单机版.html`（源 `play.html`）和 `欢乐十四分-手机版.html`（源 `mobile/index.html`）；`欢乐十四分.html` 是**手机版构建的干净名字副本**（发人用）。共 5 处：
+`happy14/site-mobile/index.html`｜`happy14/欢乐十四分.html`｜桌面 `欢乐十四分-单机版.html`｜桌面 `欢乐十四分-小游戏-2026-09-21/{欢乐十四分.html, 欢乐十四分-电脑版（大屏）.html}`。
+
+### 验证结论（2026-09-23）
+`sync-core` 三端一致 ✓｜`tools-standalone` 单机 164.1KB / 手机 142.9KB ✓｜`sim-test` ✓｜`style-check` ✓｜`ui-test` 全绿（9 项红已收口）｜`mini-test` 全绿（7 项红已收口）｜`mobile-test` A 3/3 · B 11/11 · C 6/6 ✓（整局真打：合牌 13 手 / 罚牌 16 手 / 结算层出来 / 落盘 / 零报错）｜线上 `https://h14-mobile-98661.app.workbuddy.host/` 逐字节等于本地 `site-mobile/index.html`（127828 字符），`data-diff` 恰 4 值、无 `adaptive`。

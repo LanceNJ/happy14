@@ -471,7 +471,7 @@ page.hideHelp();
   ck('随机先手：NPC 先手比例约 50%（实际 ' + (ratio * 100).toFixed(1) + '%）', Math.abs(ratio - 0.5) < 0.05, true);
 }
 
-// ---------- 5c. 开局难度询问 + 第五档「自适应」（与 ui-test §11 对称） ----------
+// ---------- 5c. 开局难度询问（第五档「自适应」已移除，见 ③ 的回归锁） ----------
 try {
   clearQ();
   global.setTimeout = queueTimer;   // newGame/showOver 里有队列定时器，用项目统一的队列接住
@@ -518,47 +518,21 @@ try {
   ck('先手宣告约 1.6 秒后自动淡出', page.data.firstBanner, '');
   clearQ();   // 队列里剩下的杂项回调别泄到后面的用例
 
-  // ③ 自适应档：有效档位跟着战绩升降（窗口 4 局，赢≥3 升、输≥3 降）
+  // ③ 「自适应」第 5 档已移除：只剩四档，选到不存在的档必须被忽略
+  ck('小程序内核只剩四档（易/中/难/地狱）', G.DIFFICULTIES.length, 4);
+  page.setDifficulty({ currentTarget: { dataset: { diff: 'medium' } } });
   page.setDifficulty({ currentTarget: { dataset: { diff: 'adaptive' } } });
-  page._setAdapt(1, []);   // 从"中等"起（下标 1）
-  ck('自适应初始有效档 = medium', page._getAdapt().effective, 'medium');
-  page._adaptFeed('w'); page._adaptFeed('w'); page._adaptFeed('w');
-  ck('窗口没满不升档', page._getAdapt().effective, 'medium');
-  page._adaptFeed('w');
-  ck('四局全胜 → 升到 hard', page._getAdapt().effective, 'hard');
-  page._adaptFeed('l'); page._adaptFeed('l'); page._adaptFeed('l'); page._adaptFeed('l');
-  ck('四局全负 → 降回 medium', page._getAdapt().effective, 'medium');
-  page._setAdapt(3, []);
-  page._adaptFeed('w'); page._adaptFeed('w'); page._adaptFeed('w'); page._adaptFeed('w');
-  ck('已在地狱档不再往上越界', page._getAdapt().effective, 'hell');
-  page._setAdapt(0, []);
-  page._adaptFeed('l'); page._adaptFeed('l'); page._adaptFeed('l'); page._adaptFeed('l');
-  ck('已在容易档不再往下越界', page._getAdapt().effective, 'easy');
+  ck('选不存在的档位被忽略，难度不变', page.data.npcDifficulty, 'medium');
+  ck('侧栏难度说明仍能正常渲染', String(page.data.diffDesc).length > 0, true);
 
-  // ④ 侧栏说明必须写明"当前实际按哪一档打"，否则玩家不知道对手什么水平
-  page._setAdapt(3, []);
-  page.setDifficulty({ currentTarget: { dataset: { diff: 'adaptive' } } });
-  ck('自适应档说明写明当前实际档位', String(page.data.diffDesc).indexOf('地狱') >= 0, true);
-
-  // ⑤ 结算时自动记账（showOver 里喂结果）——不用手动调 adaptFeed 也能升档
-  page._setAdapt(1, ['w', 'w', 'w']);
-  page.newGame();
-  page.showOver();
-  const ad = page._getAdapt();
-  ck('结算后自适应自动记了一笔', ad.hist.length, 4);
-  ck('结算凑满四胜 → 自动升到 hard', ad.effective, 'hard');
-  clearQ();   // showOver/newGame 的在途回调别泄出去
-  page.setDifficulty({ currentTarget: { dataset: { diff: 'medium' } } });   // 复原，别影响后面的用例
-  page._setAdapt(1, []);
-
-  // ⑥ WXML 静态检查：五档按钮要真的写进页面（侧栏一段 + 开局询问一段 = 2 处 × 5 个）
+  // ⑥ WXML 静态检查：四档按钮要真的写进页面（侧栏一段 + 开局询问一段 = 2 处 × 4 个）
   const wxml = require('fs').readFileSync(path.resolve(__dirname, 'miniprogram/pages/game/game.wxml'), 'utf8');
-  ck('game.wxml 里五档按钮齐全（侧栏 + 询问层）', (wxml.match(/data-diff="/g) || []).length, 10);
-  ck('game.wxml 里有自适应档按钮', wxml.indexOf('data-diff="adaptive"') >= 0, true);
+  ck('game.wxml 里四档按钮齐全（侧栏 + 询问层）', (wxml.match(/data-diff="/g) || []).length, 8);
+  ck('game.wxml 里已无自适应档按钮', wxml.indexOf('data-diff="adaptive"') < 0, true);
   ck('game.wxml 里有开局询问层', wxml.indexOf('showDiffAsk') >= 0, true);
 } catch (e) {
   fails++;
-  console.log('FAIL  开局询问/自适应用例抛异常: ' + e.message);
+  console.log('FAIL  开局询问/难度档用例抛异常: ' + e.message);
 }
 
 // ---------- 6. 胜率估计：真的算得对（这里才打开模拟） ----------

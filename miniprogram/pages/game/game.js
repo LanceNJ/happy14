@@ -51,63 +51,15 @@ const DIFF_DESC = {
   medium: '中等：NPC 一步贪心，盯着当下最赚的走。',
   hard:   '难：NPC 出牌照贪心，但补到桌面那张专挑"最不喂你"的。',
   hell:   '地狱：NPC 每种打法都推演到终局再挑，几乎算死你。',
-  adaptive: '自适应：跟着你的战绩自动升降档，目标是一直把你卡在五五开。',
 };
-const diffLabel = (d) => ({ easy: '容易', medium: '中等', hard: '难', hell: '地狱', adaptive: '自适应' }[d] || d);
+const diffLabel = (d) => ({ easy: '容易', medium: '中等', hard: '难', hell: '地狱' }[d] || d);
 
-// ---------- 自适应难度（第 5 档） ----------
-// 只看结果、不猜水平：把最近几局胜负记下来，赢太多升档、输太多降档，目标是把玩家卡在五五开。
-// 纯本地统计，不用模型。窗口 W=4：赢≥3 升一档、输≥3 降一档，夹在 easy…hell 之间（不越界）。
-const ADAPT_W = 4;
-let adaptLevel = 1;   // 0..3 → G.BASE_DIFFICULTIES 下标，默认 medium
-let adaptHist = [];   // 最近 W 局结果：'w' | 'l' | 'd'
-function loadAdapt() {
-  try {
-    if (typeof wx === 'undefined' || typeof wx.getStorageSync !== 'function') return;
-    const lv = parseInt(wx.getStorageSync('h14_adapt_lv'), 10);
-    if (lv >= 0 && lv <= 3) adaptLevel = lv;
-    const h = wx.getStorageSync('h14_adapt_hist');
-    if (Array.isArray(h)) adaptHist = h.filter((x) => x === 'w' || x === 'l' || x === 'd').slice(-ADAPT_W);
-  } catch (e) {}
-}
-function saveAdapt() {
-  try {
-    if (typeof wx === 'undefined' || typeof wx.setStorageSync !== 'function') return;
-    wx.setStorageSync('h14_adapt_lv', adaptLevel);
-    wx.setStorageSync('h14_adapt_hist', adaptHist.slice());
-  } catch (e) {}
-}
-// 每局结束喂一个结果；返回 +1 升档 / -1 降档 / 0 不动
-function adaptFeed(result) {
-  adaptHist.push(result);
-  if (adaptHist.length > ADAPT_W) adaptHist = adaptHist.slice(-ADAPT_W);
-  let moved = 0;
-  if (adaptHist.length >= ADAPT_W) {
-    const w = adaptHist.filter((x) => x === 'w').length;
-    const l = adaptHist.filter((x) => x === 'l').length;
-    if (w >= 3 && adaptLevel < 3) { adaptLevel++; moved = 1; }
-    else if (l >= 3 && adaptLevel > 0) { adaptLevel--; moved = -1; }
-  }
-  saveAdapt();
-  return moved;
-}
-// 自适应档此刻真正用的档位（传给内核的那个）；其它档原样返回
+// 真正传给内核的档位（第 5 档已移除：难度是固定四档，原样返回；保留函数便于测试与后续扩展）
 function effectiveDifficulty() {
-  if (npcDifficulty !== 'adaptive') return npcDifficulty;
-  return (G && G.BASE_DIFFICULTIES && G.BASE_DIFFICULTIES[adaptLevel]) || 'medium';
+  return npcDifficulty;
 }
-function adaptSummary() {
-  const n = adaptHist.length;
-  if (!n) return '还没打够，先按中等';
-  const w = adaptHist.filter((x) => x === 'w').length;
-  const l = adaptHist.filter((x) => x === 'l').length;
-  return '近 ' + n + ' 局 ' + w + ' 胜 ' + l + ' 负';
-}
-// 侧栏说明文案：自适应档必须写出"现在实际按哪一档打"
+// 侧栏说明文案
 function diffDescText() {
-  if (npcDifficulty === 'adaptive') {
-    return '自适应：' + adaptSummary() + ' · 当前按「' + diffLabel(effectiveDifficulty()) + '」打（赢多了自动升、输多了自动降）';
-  }
   return DIFF_DESC[npcDifficulty] || '';
 }
 
@@ -244,7 +196,6 @@ Page({
   onLoad() {
     if (SFX && SFX.load) SFX.load();
     this.setData({ soundLabel: (SFX && SFX.isMuted && SFX.isMuted()) ? '🔇 音效关' : '🔊 音效开' });
-    loadAdapt();     // 恢复自适应档位 + 近期战绩
     loadAskDiff();   // 恢复"开局是否还问难度"
     // 读持久化难度（首次用默认 medium）
     try {
@@ -270,9 +221,7 @@ Page({
     this._busy = false;
     this._sayGen = (this._sayGen || 0) + 1;
     this.setData({ showOver: false, over: {}, npcShow: null, npcMood: 'idle', npcSay: '', npcSpeak: null, oddsMeW: '0%', oddsDrawW: '0%', oddsNpcW: '0%', oddsWin: '—', oddsLose: '—', oddsDraw: '—', oddsN: '—', decisionRate: '—', scoreMe: '0.00', scoreNpc: '0.00', scoreLead: '暂时打平', scoreLeadCls: 'even', scorePulse: '' });
-    const dlText = (npcDifficulty === 'adaptive')
-      ? ('自适应·' + diffLabel(effectiveDifficulty()))
-      : diffLabel(npcDifficulty);
+    const dlText = diffLabel(npcDifficulty);
     this.log('🎴 新一局开始！' + (game.turn === 'player' ? '你先手' : 'NPC 先手') + '（难度：' + dlText + '）。');
     this.announceFirst();   // 大字亮一下谁先手，1.6 秒自动淡出
     snd('deal');     // 发牌音效：开局哗啦一下
@@ -315,7 +264,7 @@ Page({
     }
     this.setData({
       npcDifficulty: d,
-      diffDesc: diffDescText(),   // 自适应档要带上"当前实际按哪一档打"
+      diffDesc: diffDescText(),
     });
   },
 
@@ -837,9 +786,6 @@ Page({
     const winner = ps > ns ? '🎉 你赢了！' : ns > ps ? '🤖 NPC 赢了' : '🤝 平局！';
     const rd = A.rateDecisions(decisions);
     const sayEvent = ps < ns ? 'overWin' : ps > ns ? 'overLose' : 'overDraw';
-    // 自适应档：把这局结果喂进去，可能升降档。本局已结算完毕，只影响下一局。
-    let adaptMoved = 0;
-    if (npcDifficulty === 'adaptive') adaptMoved = adaptFeed(ps > ns ? 'w' : ps < ns ? 'l' : 'd');
     const line = A.npcSay(sayEvent);
     const fmt = (arr) => arr.length ? arr.map((c) => c.label).join('、') : '（无）';
     this._sayGen = (this._sayGen || 0) + 1;   // 结算弹窗是主角，大娃娃让位
@@ -848,17 +794,13 @@ Page({
       npcMood: ps < ns ? 'greedy' : ps > ns ? 'sad' : 'shock',
       npcSay: '',
       npcSpeak: null,
-      diffDesc: diffDescText(),   // 自适应档可能刚升降过，侧栏说明跟着刷新
+      diffDesc: diffDescText(),
       over: {
         p: '你的得分：' + ps.toFixed(2),
         n: 'NPC 得分：' + ns.toFixed(2),
         winner: winner,
         say: line ? ('🤖 NPC：「' + line.text + '」') : '',
         rate: rd.total ? ('本局决策质量：' + rd.optimal + '/' + rd.total + ' 手最优 · 正确率 ' + rd.rate + '%') : '',
-        adapt: npcDifficulty === 'adaptive'
-          ? ('🎚 自适应：' + adaptSummary() + ' · 当前按「' + diffLabel(effectiveDifficulty()) + '」打'
-             + (adaptMoved > 0 ? '（升档了）' : adaptMoved < 0 ? '（降档了）' : ''))
-          : '',
         sections: [
           scoreSection('🧑 你的算分过程', 'me', game.playerLoot, game.playerPenalty, ps),
           scoreSection('🤖 NPC 的算分过程', 'npc', game.npcLoot, game.npcPenalty, ns),
@@ -979,17 +921,10 @@ Page({
   _setSimEnabled(v) { simEnabled = !!v; },
   // 供测试关闭先手随机（保确定性，避免 NPC 先手的在途回调污染用例）
   _setFirstMoveRandom(v) { firstMoveRandom = !!v; },
-  // 供测试：开局询问开关 + 自适应档位读写
+  // 供测试：开局询问开关
   _setAskDiff(v) { setAskDiff(v); this.setData({ askNever: !askDiff }); },
   _getAskDiff() { return askDiff; },
   _setFirstRunPending(v) { firstRunPending = !!v; },
   _getPendingDiff() { return pendingDiff; },
   _effectiveDifficulty() { return effectiveDifficulty(); },
-  _getAdapt() { return { level: adaptLevel, hist: adaptHist.slice(), effective: effectiveDifficulty(), summary: adaptSummary() }; },
-  _setAdapt(lv, hist) {
-    if (typeof lv === 'number' && lv >= 0 && lv <= 3) adaptLevel = lv;
-    if (Array.isArray(hist)) adaptHist = hist.slice(-ADAPT_W);
-    saveAdapt();
-  },
-  _adaptFeed(r) { return adaptFeed(r); },
 });

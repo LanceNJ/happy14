@@ -63,66 +63,19 @@ const DIFF_DESC = {
   medium: '中等：NPC 一步贪心，盯着当下最赚的走。',
   hard:   '难：NPC 出牌照贪心，但补到桌面那张专挑"最不喂你"的。',
   hell:   '地狱：NPC 每种打法都推演到终局再挑，几乎算死你。',
-  adaptive: '自适应：跟着你的战绩自动升降档，目标是一直把你卡在五五开。',
 };
-const diffLabel = (d) => ({ easy: '容易', medium: '中等', hard: '难', hell: '地狱', adaptive: '自适应' }[d] || d);
+const diffLabel = (d) => ({ easy: '容易', medium: '中等', hard: '难', hell: '地狱' }[d] || d);
 
-// ---------- 自适应难度（第 5 档） ----------
-// 只看结果、不猜水平：把最近几局的胜负记下来，赢太多就升档、输太多就降档，目标是把你卡在五五开。
-// 纯本地统计，不需要模型。升降规则（窗口 W=4）：近 4 局赢 ≥3 局 → 升一档；输 ≥3 局 → 降一档；否则不动。
-// 夹在 easy…hell 之间（不会越过两端）。档位与战绩都持久化，换设备/重开浏览器都还在。
-const ADAPT_W = 4;
-let adaptLevel = 1;    // 0..3 → 对应 G.BASE_DIFFICULTIES 的下标，默认 medium
-let adaptHist = [];    // 最近 W 局结果：'w' | 'l' | 'd'
-function loadAdapt() {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    const lv = parseInt(localStorage.getItem('h14_adapt_lv'), 10);
-    if (lv >= 0 && lv <= 3) adaptLevel = lv;
-    const h = JSON.parse(localStorage.getItem('h14_adapt_hist') || '[]');
-    if (Array.isArray(h)) adaptHist = h.filter((x) => x === 'w' || x === 'l' || x === 'd').slice(-ADAPT_W);
-  } catch (e) {}
-}
-function saveAdapt() {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem('h14_adapt_lv', String(adaptLevel));
-    localStorage.setItem('h14_adapt_hist', JSON.stringify(adaptHist));
-  } catch (e) {}
-}
-// 每局结束喂一个结果进来；返回 net：+1 升档、-1 降档、0 不动
-function adaptFeed(result) {
-  adaptHist.push(result);
-  if (adaptHist.length > ADAPT_W) adaptHist = adaptHist.slice(-ADAPT_W);
-  let moved = 0;
-  if (adaptHist.length >= ADAPT_W) {
-    const w = adaptHist.filter((x) => x === 'w').length;
-    const l = adaptHist.filter((x) => x === 'l').length;
-    if (w >= 3 && adaptLevel < 3) { adaptLevel++; moved = 1; }
-    else if (l >= 3 && adaptLevel > 0) { adaptLevel--; moved = -1; }
-  }
-  saveAdapt();
-  return moved;
-}
 // 手机版整体降一档：只有构建时注入 window.H14_EASY_SHIFT=1 才生效（tools-standalone.js 的手机变体）。
 // 桌面单机版 / Electron / 小程序没有这个标记，走原值，行为零变化。
-// 映射：地狱→难、难→中等、中等→容易、容易→容易（已是最低不再降）。自适应内部升降档后同样经过这里。
+// 映射：地狱→难、难→中等、中等→容易、容易→容易（已是最低不再降）。
 const H14_SHIFT = (typeof window !== 'undefined' && window.H14_EASY_SHIFT)
   ? { hell: 'hard', hard: 'medium', medium: 'easy', easy: 'easy' } : null;
-// 自适应档此刻真正用的档位（传给内核的那个）；其它档原样返回；手机版在此统一降一档
+// 真正传给内核的档位（桌面/小程序原样返回；手机版在此统一降一档）
 function effectiveDifficulty() {
-  const d = (npcDifficulty !== 'adaptive') ? npcDifficulty
-    : ((G && G.BASE_DIFFICULTIES && G.BASE_DIFFICULTIES[adaptLevel]) || 'medium');
+  const d = npcDifficulty;
   return (H14_SHIFT && H14_SHIFT[d]) || d;
 }
-function adaptSummary() {
-  const n = adaptHist.length;
-  if (!n) return '还没打够，先按中等';
-  const w = adaptHist.filter((x) => x === 'w').length;
-  const l = adaptHist.filter((x) => x === 'l').length;
-  return '近 ' + n + ' 局 ' + w + ' 胜 ' + l + ' 负';
-}
-
 // ---------- 开局难度询问（用户要求：新开局先问一句） ----------
 // 每次开局前弹一下，5 档任选（默认停在当前档）；勾"不再问"就永久跳过，随时可在侧栏改。
 let askDiff = true;
@@ -434,9 +387,8 @@ function newGame() {
   hideNpcSpeak();
   setNpcMood('idle');
   hideNpcBubble();
-  const dl = (npcDifficulty === 'adaptive')
-    ? ('自适应·' + diffLabel(effectiveDifficulty()))
-    : diffLabel(npcDifficulty);
+  const eSh = H14_SHIFT && H14_SHIFT[npcDifficulty];
+  const dl = diffLabel(npcDifficulty) + (eSh && eSh !== npcDifficulty ? '·实按' + diffLabel(eSh) : '');
   log('🎴 新一局开始！' + (state.turn === 'player' ? '你先手' : 'NPC 先手') + '（难度：' + dl + '）。');
   announceFirst();   // 大字亮一下谁先手，1.6 秒自动淡出
   snd('deal');     // 发牌音效：开局哗啦一下
@@ -889,9 +841,6 @@ function showOver() {
   const winner = ps > ns ? '🎉 你赢了！' : ns > ps ? '🤖 NPC 赢了' : '🤝 平局！';
   const rd = A ? A.rateDecisions(decisions) : null;
   const sayEvent = ps < ns ? 'overWin' : ps > ns ? 'overLose' : 'overDraw';
-  // 自适应档：把这局结果喂进去，可能升降档。本局已结算完毕，所以只影响下一局。
-  let adaptMoved = 0;
-  if (npcDifficulty === 'adaptive') adaptMoved = adaptFeed(ps > ns ? 'w' : ps < ns ? 'l' : 'd');
   const line = A ? A.npcSay(sayEvent) : null;
   setNpcMood(ps < ns ? 'greedy' : ps > ns ? 'sad' : 'shock');
 
@@ -906,7 +855,6 @@ function showOver() {
     `<div class="over-score">你 <b>${ps.toFixed(2)}</b> ： <b>${ns.toFixed(2)}</b> NPC</div>` +
     (line ? `<div class="over-say">🤖 NPC：「${line.text}」</div>` : '') +
     (rd && rd.total ? `<div class="over-rate">本局决策质量：${rd.optimal}/${rd.total} 手最优 · 正确率 ${rd.rate}%</div>` : '') +
-    (npcDifficulty === 'adaptive' ? `<div class="over-rate">🎚 自适应：${adaptSummary()} · 当前按「${diffLabel(effectiveDifficulty())}」打${adaptMoved > 0 ? '（升档了）' : adaptMoved < 0 ? '（降档了）' : ''}</div>` : '') +
     sideScoreHtml('🧑 你的算分过程', state.playerLoot, state.playerPenalty, ps, 'me') +
     sideScoreHtml('🤖 NPC 的算分过程', state.npcLoot, state.npcPenalty, ns, 'npc') +
     `<details><summary>查看双方全部牌面</summary>` +
@@ -917,7 +865,7 @@ function showOver() {
     `</details>`;
   $('overModal').classList.remove('hidden');
   snd(ps > ns ? 'win' : ps < ns ? 'lose' : 'drawEnd');
-  renderDiff();   // 自适应档可能刚升降过，侧栏说明跟着刷新
+  renderDiff();   // 侧栏难度说明跟着刷新
   log('本局结束。你 ' + ps + ' : NPC ' + ns + '。');
 }
 
@@ -1109,10 +1057,7 @@ function renderDiff() {
   }
   const el = $('diffDesc');
   if (!el) return;
-  if (npcDifficulty === 'adaptive') {
-    // 自适应档：说明必须带上"现在实际按哪一档打"，否则玩家不知道对手到底是什么水平
-    el.textContent = '自适应：' + adaptSummary() + ' · 当前按「' + diffLabel(effectiveDifficulty()) + '」打（赢多了自动升、输多了自动降）';
-  } else {
+  {
     // 手机版降档后必须说明实际强度，否则"选中等按容易打"玩家会被蒙在鼓里。
     // 注意条件是"真降了一档"（easy→easy 不降不标），别只判键存在。
     const sh = H14_SHIFT && H14_SHIFT[npcDifficulty];
@@ -1226,7 +1171,6 @@ function hideHelp() {
 document.addEventListener('DOMContentLoaded', () => {
   if (SFX && SFX.load) SFX.load();   // 恢复上次的静音选择
   updateSoundBtn();
-  loadAdapt();     // 恢复自适应档位 + 近期战绩
   loadPersistDiff(); // 恢复持久化难度——必须在 renderDiff() 前，否则侧栏高亮停留在默认档
   loadAskDiff();   // 恢复"开局是否还问难度"
   const hb = $('helpBtn');
@@ -1300,7 +1244,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && module.ex
     getDifficulty: () => npcDifficulty,
     setDifficulty: applyDifficulty,
     renderDiff: renderDiff,
-    // 开局难度询问 + 自适应档（测试要能关掉询问、要能直接读档位）
+    // 开局难度询问（测试要能关掉询问、要能直接读档位）
     requestNewGame: requestNewGame,
     confirmDiffAsk: confirmDiffAsk,
     pickAskDiff: pickAskDiff,
@@ -1314,18 +1258,6 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && module.ex
     setFirstRunPending: (v) => { firstRunPending = !!v; },
     getPendingDiff: () => pendingDiff,
     effectiveDifficulty: effectiveDifficulty,
-    getAdapt: () => ({
-      level: adaptLevel,
-      hist: adaptHist.slice(),
-      effective: effectiveDifficulty(),
-      summary: adaptSummary(),
-    }),
-    setAdapt: (lv, hist) => {
-      if (typeof lv === 'number' && lv >= 0 && lv <= 3) adaptLevel = lv;
-      if (Array.isArray(hist)) adaptHist = hist.slice(-ADAPT_W);
-      saveAdapt();
-    },
-    adaptFeed: adaptFeed,
     getOdds: () => odds,
     refreshOdds: refreshOdds,
     stepOdds: stepOdds,

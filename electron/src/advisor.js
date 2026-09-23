@@ -245,7 +245,7 @@ function hideUnknown(st, rng) {
 function other(who) { return who === 'player' ? 'npc' : 'player'; }
 
 // 走完这一局，返回 1=玩家胜 / -1=NPC胜 / 0=平。
-// npcDiff：NPC 用的难度档（'easy'..'hell'，自适应档请在调用前解析成基础档）；缺省 medium 贪心。
+// npcDiff：NPC 用的难度档（'easy'..'hell'）；缺省 medium 贪心。
 function playOut(st, npcDiff) {
   let guard = 0;
   while (!G.isGameOver(st) && guard++ < 600) {

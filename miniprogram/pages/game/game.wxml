@@ -86,7 +86,6 @@
         <view class="diff-btn {{npcDifficulty==='medium'?'on':''}}" bindtap="setDifficulty" data-diff="medium">中等</view>
         <view class="diff-btn {{npcDifficulty==='hard'?'on':''}}" bindtap="setDifficulty" data-diff="hard">难</view>
         <view class="diff-btn {{npcDifficulty==='hell'?'on':''}}" bindtap="setDifficulty" data-diff="hell">地狱</view>
-        <view class="diff-btn diff-wide {{npcDifficulty==='adaptive'?'on':''}}" bindtap="setDifficulty" data-diff="adaptive">自适应</view>
       </view>
       <view class="diff-desc">{{diffDesc}}</view>
     </view>
@@ -187,7 +186,6 @@
       <view class="over-score">{{over.p}}　|　{{over.n}}</view>
       <view wx:if="{{over.say}}" class="over-say">{{over.say}}</view>
       <view wx:if="{{over.rate}}" class="over-rate">{{over.rate}}</view>
-      <view wx:if="{{over.adapt}}" class="over-rate">{{over.adapt}}</view>
 
       <!-- 算分过程：按花色/王摊开张数与得分 -->
       <view class="score-side {{sec.cls}}" wx:for="{{over.sections}}" wx:for-item="sec" wx:key="title">
@@ -219,7 +217,6 @@
         <view class="diff-btn {{askDiffPending==='medium'?'on':''}}" bindtap="pickAskDiff" data-diff="medium">中等</view>
         <view class="diff-btn {{askDiffPending==='hard'?'on':''}}" bindtap="pickAskDiff" data-diff="hard">难</view>
         <view class="diff-btn {{askDiffPending==='hell'?'on':''}}" bindtap="pickAskDiff" data-diff="hell">地狱</view>
-        <view class="diff-btn diff-wide {{askDiffPending==='adaptive'?'on':''}}" bindtap="pickAskDiff" data-diff="adaptive">自适应</view>
       </view>
       <view class="diff-desc">{{askDiffDesc}}</view>
       <view class="ask-never" bindtap="toggleAskNever">
@@ -236,7 +233,7 @@
         <view class="help-sec"><text class="help-b">目标</text>：把牌凑成 14 分收走当战利品，一局结束比谁分高。</view>
         <view class="help-sec"><text class="help-b">牌怎么计分</text>：花色 🂡黑桃1分、💗红桃0.75、♣草花0.5、♦方片0.25；大小王 👑大王1分、🌟小王0.75；配14时大小王算0（随便配，等于白送一张好牌）；点数 A=1…K=13。</view>
         <view class="help-sec"><text class="help-b">怎么打一手（先手随机，轮流）</text>：① 点你的手牌 + 点桌面1张牌，若加起来=14 → 点「✅ 确认匹配」→ 牌飞过去合拢收进战利品。② 凑不出14？点「🚫 罚掉选中的1张」，丢1张（隐藏，扣分）。</view>
-        <view class="help-sec"><text class="help-b">难度（侧栏可切，五档）</text>：容易=大半随机、常送高分牌；中等=一步贪心；难=出牌贪心但补牌不喂你；地狱=每种打法推演到终局；自适应=跟着你的战绩自动升降档，目标把你卡在五五开。每次开局都会先问你一句，勾了"别再问"就跳过。</view>
+        <view class="help-sec"><text class="help-b">难度（侧栏可切，四档）</text>：容易=大半随机、常送高分牌；中等=一步贪心；难=出牌贪心但补牌不喂你；地狱=每种打法推演到终局。每次开局都会先问你一句，勾了"别再问"就跳过。</view>
         <view class="help-sec"><text class="help-b">收牌之后</text>：你挑1张手牌补回桌面（决定给对手留什么），其余自动从补牌堆补满到4张。</view>
         <view class="help-sec"><text class="help-b">NPC（小痞机器人）</text>：每轮都看得见——先指牌、再翻牌、再合牌；重要时刻会蹦出大娃娃说话。</view>
         <view class="help-sec"><text class="help-b">残局与结算</text>：补牌堆抓完，手牌只减不增，直到双方都打不出、手牌耗尽。得分 = 战利品合计 − 罚牌合计，高者胜。侧栏实时比分牌随时看谁领先，胜率是同水平假设下的赢面估计。</view>

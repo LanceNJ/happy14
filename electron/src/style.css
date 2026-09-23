@@ -312,8 +312,6 @@ body {
   background: linear-gradient(180deg, #ffd86b, #f7ac2e); color: #4a3410;
   border-color: var(--gold-d); box-shadow: 0 3px 0 var(--gold-d);
 }
-/* 第 5 档「自适应」独占一行：它不是"固定强度的第五级"，而是会自己变的东西，不该混在四档里看着同质 */
-.diff-btn[data-diff="adaptive"] { flex: 1 1 100%; }
 .diff-desc { font-size: var(--fs-s); font-weight: 700; color: var(--ink-soft); line-height: 1.4; min-height: 2.4em; }
 
 /* 开局难度询问层：这是要一眼看懂再点一下的地方，按钮放大；底部一个"别再问" */
@@ -699,7 +697,7 @@ body {
   }
   .modal-box h2 { font-size: 17px; margin-bottom: 10px; }
 
-  /* 3. 询问层 + 侧栏难度：四档按钮 2×2，自适应独占一行 */
+  /* 3. 询问层 + 侧栏难度：四档按钮 2×2 */
   #askDiffSeg,
   #diffSeg,
   .ask-seg {
@@ -714,11 +712,6 @@ body {
     min-width: 0;
     font-size: 13px;
     padding: 9px 2px;
-  }
-  #askDiffSeg .diff-btn[data-diff="adaptive"],
-  #diffSeg .diff-btn[data-diff="adaptive"],
-  .ask-seg .diff-btn[data-diff="adaptive"] {
-    grid-column: 1 / -1;
   }
   .diff-desc { font-size: 11.5px; min-height: 2.6em; }
   .ask-never { font-size: 12px; margin: 6px 0 8px; }

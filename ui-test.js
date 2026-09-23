@@ -738,7 +738,7 @@ try {
   console.log('FAIL  连开新游戏抛异常: ' + e.message);
 }
 
-// ---------- 11. 开局难度询问 + 第五档「自适应」 ----------
+// ---------- 11. 开局难度询问（第五档「自适应」已移除，见 ③ 的回归锁） ----------
 try {
   // ① 询问层：默认停在当前档；选档只是选中，点「开始」才真生效
   T.setDifficulty('medium');
@@ -764,46 +764,21 @@ try {
   ck('不再问时不弹询问层', T.isAskDiffOpen(), false);
   T.setAskDiff(true);   // 复原
 
-  // ③ 自适应档：有效档位跟着战绩升降（窗口 4 局，赢≥3 升、输≥3 降）
+  // ③ 「自适应」第 5 档已移除：只剩四档，而且选到不存在的档必须被忽略（不能把界面打崩）
+  ck('内核只剩四档（易/中/难/地狱）', G.DIFFICULTIES.length, 4);
+  T.setDifficulty('medium');
   T.setDifficulty('adaptive');
-  T.setAdapt(1, []);   // 从"中等"起（下标 1）
-  ck('自适应初始有效档 = medium', T.effectiveDifficulty(), 'medium');
-  T.adaptFeed('w'); T.adaptFeed('w'); T.adaptFeed('w');
-  ck('窗口没满不升档', T.effectiveDifficulty(), 'medium');
-  T.adaptFeed('w');
-  ck('四局全胜 → 升到 hard', T.effectiveDifficulty(), 'hard');
-  T.adaptFeed('l'); T.adaptFeed('l'); T.adaptFeed('l'); T.adaptFeed('l');
-  ck('四局全负 → 降回 medium', T.effectiveDifficulty(), 'medium');
-  T.setAdapt(3, []);
-  T.adaptFeed('w'); T.adaptFeed('w'); T.adaptFeed('w'); T.adaptFeed('w');
-  ck('已在地狱档不再往上越界', T.effectiveDifficulty(), 'hell');
-  T.setAdapt(0, []);
-  T.adaptFeed('l'); T.adaptFeed('l'); T.adaptFeed('l'); T.adaptFeed('l');
-  ck('已在容易档不再往下越界', T.effectiveDifficulty(), 'easy');
-
-  // ④ 侧栏说明必须写出"当前实际按哪一档打"，否则玩家不知道对手什么水平
-  T.setAdapt(3, []);
-  T.setDifficulty('adaptive');
+  ck('选不存在的档位被忽略，难度不变', T.getDifficulty(), 'medium');
   T.renderDiff();
-  ck('自适应档说明写明当前实际档位', String(reg.diffDesc.textContent).indexOf('地狱') >= 0, true);
+  ck('侧栏难度说明仍能正常渲染', String(reg.diffDesc.textContent).length > 0, true);
 
-  // ⑤ 结算时自动记账（showOver 里喂结果）——不用手动调 adaptFeed 也能升档
-  T.setAdapt(1, ['w', 'w', 'w']);
-  T.newGame();
-  T.showOver();
-  const ad = T.getAdapt();
-  ck('结算后自适应自动记了一笔', ad.hist.length, 4);
-  ck('结算凑满四胜 → 自动升到 hard', ad.effective, 'hard');
-  T.setDifficulty('medium');   // 复原，别影响后面的用例
-  T.setAdapt(1, []);
-
-  // ⑥ HTML 静态检查：五档按钮要真的写进页面（侧栏一段 + 开局询问一段 = 2 处 × 5 个）
+  // ⑥ HTML 静态检查：四档按钮要真的写进页面（侧栏一段 + 开局询问一段 = 2 处 × 4 个）
   // 桩没有 querySelectorAll（那是真实 DOM 的能力），所以这里直接查文件，反而更贴近"用户看得到什么"
   const countDiffBtns = (s) => (s.match(/data-diff="/g) || []).length;
   for (const f of ['electron/src/index.html', 'play.html']) {
     const html = fs.readFileSync(path.resolve(__dirname, f), 'utf8');
-    ck(f + ' 里五档按钮齐全（侧栏 + 询问层）', countDiffBtns(html), 10);
-    ck(f + ' 里有自适应档按钮', html.indexOf('data-diff="adaptive"') >= 0, true);
+    ck(f + ' 里四档按钮齐全（侧栏 + 询问层）', countDiffBtns(html), 8);
+    ck(f + ' 里已无自适应档按钮', html.indexOf('data-diff="adaptive"') < 0, true);
     ck(f + ' 里有开局询问层', html.indexOf('id="diffModal"') >= 0, true);
   }
 
@@ -829,19 +804,35 @@ try {
   flushUntil(() => fb.classList.contains('hidden'), 10);
   ck('先手宣告约 1.6 秒后自动淡出', fb.classList.contains('hidden'), true);
 
-  // ⑨ NPC 罚牌留小牌（玩家洞见的回归锁）：方片4(0.25) vs 红桃K(0.75) 二选一 → 罚 K 留 4。
-  //    总代价 = 价格 − 0.06×点数；K 只能配 3，留着不如 4 值钱（实测 medium 基座 51.7%→56.4%，N=1000）
-  const mkC = (id, suit, rank, score) => ({ id, suit, rank, label: suit + rank, short: String(rank), suitSymbol: suit, red: suit === 'H' || suit === 'D', matchValue: rank, score, isJoker: false });
-  const jokC = { id: 'j', suit: null, rank: 14, label: '大王', short: '王', suitSymbol: '', red: false, matchValue: 14, score: 2, isJoker: true };
-  const penState = { npcHand: [mkC('p4', 'D', 4, 0.25), mkC('pK', 'H', 13, 0.75)], table: [mkC('t5', 'C', 5, 0.5)] };
-  const penAct = G.chooseNpcAction(penState, 'medium');
-  ck('罚牌二选一（方片4 vs 红桃K）→ 罚 K 留小牌', penAct.type === 'penalty' ? penAct.cardId : 'match:' + penAct.type, 'pK');
-  const penState2 = { npcHand: [jokC, mkC('d3', 'D', 3, 0.25)], table: [mkC('t6', 'C', 6, 0.5)] };
-  const penAct2 = G.chooseNpcAction(penState2, 'medium');
-  ck('王百搭不拿去罚', penAct2.type === 'penalty' ? penAct2.cardId : 'match:' + penAct2.type, 'd3');
+  // ⑨ NPC 罚牌的两条轴（记牌版回归锁，2026-09-23 重写；旧版"价格−0.06×点数"是点数代理，已废弃）。
+  //    判据 = 花色分 + playW × 可玩性；可玩性 = 穷尽"这张牌现在还能不能凑成 14"，0 = 两跳以上（该先罚）。
+  //    ① 两张都还活着 → 先罚便宜的；② 有一张已经死了（搭档全出完）→ 先罚死的，哪怕它更贵；
+  //    ③ 手里有王时，宁可罚那张死牌、把王留住（王是搭车客，但罚出去就是白丢分）。
+  const penBase = (hand, loot) => ({
+    table: [G.makeCard('C', 5)], playerHand: [], npcHand: hand,
+    playerLoot: loot, npcLoot: [], playerPenalty: [], npcPenalty: [],
+    drawPile: [], turn: 'npc', phase: 'playing', numDecks: 2,
+  });
+  const aGone = [];   // 8 张 A 全部露面 → K 的搭档(A)彻底没了 → K 死
+  for (let i = 0; i < 8; i++) aGone.push(G.makeCard('C', 1));
+  const pickPen = (hand, loot) => {
+    const act = G.chooseNpcAction(penBase(hand, loot), 'medium');
+    return act.type === 'penalty' ? hand.find((c) => c.id === act.cardId) : null;
+  };
+  const h1 = [G.makeCard('D', 4), G.makeCard('H', 13)];     // ♦4(0.25, 活) vs ♥K(0.75, 活)
+  const p1 = pickPen(h1, []);
+  ck('罚牌①两张都活着 → 先罚便宜的（♦4 而不是 ♥K）', p1 && (p1.suit + p1.rank), 'D4');
+  const h2 = [G.makeCard('D', 4), G.makeCard('H', 13)];     // 同上，但 A 全出完 → ♥K 已死
+  const p2 = pickPen(h2, aGone);
+  ck('罚牌②K 已死（A 全出完）→ 宁罚贵的 ♥K，留住还能用的 ♦4', p2 && (p2.suit + p2.rank), 'H13');
+  const deck9 = G.buildDeck(2);
+  const joker9 = deck9.filter((c) => c.isJoker)[0];
+  const h3 = [joker9, G.makeCard('H', 13)];                 // 王 + 已死的 ♥K
+  const p3 = pickPen(h3, aGone);
+  ck('罚牌③手里有王 → 仍先罚那张死的 ♥K，王不拿去罚', p3 && (p3.suit + p3.rank), 'H13');
 } catch (e) {
   fails++;
-  console.log('FAIL  开局询问/自适应用例抛异常: ' + e.message);
+  console.log('FAIL  开局询问/难度档用例抛异常: ' + e.message);
 }
 
 // ---------- 12. 浏览器模式（play.html 的真实路径：没有 require，模块挂 window） ----------
@@ -851,7 +842,7 @@ try {
   const sandbox = {
     window: {}, document: env2.doc, console: console, setTimeout: noTimer,
     module: { exports: {} },
-    // 真实浏览器有 localStorage（难度/自适应档位/是否还问，都靠它持久化）
+    // 真实浏览器有 localStorage（难度/是否还问，都靠它持久化）
     localStorage: {
       getItem: (k) => (k in store ? store[k] : null),
       setItem: (k, v) => { store[k] = String(v); },
@@ -932,9 +923,9 @@ try {
   // 预置容易 → 已是最低，不再降、不再标注
   const e3c = mkMobile({ h14_diff: 'easy' });
   ck('手机版：容易已到底不再降档标注', String(e3c.reg.askDiffDesc.textContent).indexOf('降一档') < 0, true);
-  // 预置自适应 → 自身不走 H14_SHIFT 映射，询问说明不误标
+  // 预置一个已不存在的档位（旧的自适应）→ 必须被忽略、回落默认，不能把界面打崩
   const e3d = mkMobile({ h14_diff: 'adaptive' });
-  ck('手机版：自适应档询问说明不误标', String(e3d.reg.askDiffDesc.textContent).indexOf('实际按') < 0, true);
+  ck('手机版：不存在的档位被忽略、回落默认中等', String(e3d.reg.askDiffDesc.textContent).indexOf('一步贪心') >= 0, true);
   // 点开始真开局（中等→实按容易），游戏跑起来不炸
   e3a.reg.askDiffGo._fire('click');
   ck('手机版：点开始后询问层关闭', e3a.reg.diffModal.classList.contains('hidden'), true);

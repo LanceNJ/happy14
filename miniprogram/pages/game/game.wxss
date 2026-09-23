@@ -143,8 +143,6 @@ page {
   border-color: #c9901f; box-shadow: 0 6rpx 0 #c9901f;
 }
 .diff-desc { font-size: 22rpx; font-weight: 700; color: #7d6a52; line-height: 1.4; min-height: 2.4em; }
-/* 第 5 档「自适应」独占一行：它不是"固定强度的第五级"，而是会自己变的东西 */
-.diff-wide { flex: 1 1 100%; }
 /* 开局难度询问层：这是要一眼看懂再点一下的地方，按钮放大；底部一个"别再问" */
 .ask-seg { margin-bottom: 16rpx; }
 .ask-seg .diff-btn { font-size: 30rpx; padding: 18rpx 4rpx; }

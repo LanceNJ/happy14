@@ -41,7 +41,7 @@
         <button id="startGo" class="ss-go">开始游戏</button>
         <button id="startHelp" class="ss-help">玩法说明</button>
         <div class="ss-coach">
-          <span>🧑‍🏫 新手辅导（带练）</span>
+          <span>💡 智能提示（陪你出牌）</span>
           <button id="coachToggleStart" class="toggle">关</button>
         </div>
         <div id="visitStatStart" class="visit-stat ss-stat"></div>
@@ -59,11 +59,14 @@
       </div>
       <div class="acts">
         <button id="learnBtn" class="icon" aria-label="NPC 学习">🧠</button>
-        <button id="coachBtn" class="icon" aria-label="新手辅导">🧑‍🏫</button>
+        <button id="coachBtn" class="icon labeled" title="不会出牌？点我看推荐走法" aria-label="智能提示：不会出牌时点我">💡<span>提示</span></button>
         <button id="helpBtn" class="icon" aria-label="玩法">?</button>
         <button id="newGame" class="icon" aria-label="重开">↻</button>
       </div>
     </header>
+
+    <!-- 提示按钮引导气泡（不会出牌时点我，一次性） -->
+    <div id="coachNudge" class="coach-nudge"></div>
 
     <!-- NPC 区 -->
     <section id="npcArea">
@@ -83,7 +86,7 @@
       <div id="message" class="msg"></div>
     </section>
 
-    <!-- 教练面板（新手辅导带练，默认隐藏） -->
+    <!-- 提示面板（智能提示，默认隐藏） -->
     <div id="coachPanel" class="coach-panel hidden"></div>
 
     <!-- 我的区 -->
@@ -178,6 +181,7 @@
           <p><b>收牌之后</b>：你挑 1 张手牌补回桌面（决定给对手留什么），其余自动从补牌堆补满到 4 张。</p>
           <p><b>难度（开局选，四档）</b>：容易=大半随机、常送高分牌；中等=一步贪心；难=出牌贪心但补牌不喂你；地狱=每种打法推演到终局。<b>难 / 地狱会跟着你的学习记录变强</b>（只学你赢的局，见顶部 🧠），容易 / 中等永远固定。</p>
           <p><b>NPC（圆滚滚小可爱）</b>：每轮先指牌、再亮牌告诉你它凑成了 14，重要时候会说句场面话。</p>
+          <p><b>💡 提示（陪练）</b>：拿不准怎么出，就点顶部「💡 提示」。它会列出本回合所有能凑成 14 的组合、标出最划算那手，点一下直接替你出；补牌阶段也会告诉你补哪张最稳。开新局前也能在标题画面先把它打开。</p>
           <p><b>残局与结算</b>：补牌堆抓完，手牌只减不增，直到双方都打不出、手牌耗尽。得分 = 战利品合计 − 罚牌合计，高者胜。</p>
         </div>
         <button id="helpClose" class="go">知道了</button>

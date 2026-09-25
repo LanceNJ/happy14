@@ -46,6 +46,8 @@ function updateCoachUI() {
 function setCoach(v) {
   coachOn = !!v;
   try { if (typeof localStorage !== 'undefined') localStorage.setItem('h14_coach', coachOn ? '1' : '0'); } catch (e) {}
+  if (coachOn) { try { localStorage.setItem('h14_coach_nudge', '1'); } catch (e) {} }
+  const n = $('coachNudge'); if (n) n.classList.remove('show');
   updateCoachUI();
   if (coachOn) recomputeCoach(); else { coachMoves = []; coachHint = { hand: new Set(), table: new Set(), bestHand: new Set(), bestTable: new Set() }; }
   renderCoach();
@@ -82,7 +84,18 @@ function applyCoachCombo(move) {
   snd('tap');
   renderAll();
 }
+
+function updateCoachNudge() {
+  const n = $('coachNudge'); if (!n) return;
+  let seen = false;
+  try { seen = localStorage.getItem('h14_coach_nudge') === '1'; } catch (e) {}
+  const show = !coachOn && !seen && state && state.turn === 'player' && state.phase === 'playing' && ui.mode === 'select';
+  n.classList.toggle('show', show);
+  if (show) n.textContent = '不会出牌？点我看推荐走法 →';
+}
+
 function renderCoach() {
+  updateCoachNudge();
   const panel = $('coachPanel');
   if (!panel) return;
   if (!coachOn || !state || state.turn !== 'player' || state.phase !== 'playing') { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
@@ -92,14 +105,14 @@ function renderCoach() {
   if (ui.mode === 'select') {
     if (coachMoves.length === 0) {
       const cheapest = state.playerHand.slice().sort(function (a, b) { return a.score - b.score; })[0];
-      panel.innerHTML = '<div class="coach-h">🧑‍🏫 教练 ' + stepBtn + '</div>' +
+      panel.innerHTML = '<div class="coach-h">💡 提示 ' + stepBtn + '</div>' +
         '<div class="coach-b">这回合手牌 + 桌面真凑不出 14，只能罚牌。建议罚最便宜的 <b>' + cardName(cheapest) + '</b>（扣分最少）——点它，再点「🚫 罚掉」。</div>';
     } else if (coachStepMode) {
       const i = Math.max(0, Math.min(coachStepIdx, coachMoves.length - 1));
       const m = coachMoves[i];
       const best = i === 0;
       const txt = (coachMoves.length === 1) ? '就这么一种凑法' : ('第 ' + (i + 1) + ' / ' + coachMoves.length + ' 种');
-      panel.innerHTML = '<div class="coach-h">🧑‍🏫 教练 · ' + txt + ' ' + stepBtn + '</div>' +
+      panel.innerHTML = '<div class="coach-h">💡 提示 · ' + txt + ' ' + stepBtn + '</div>' +
         '<div class="coach-b big">' + (best ? '<span class="rec">推荐</span> ' : '') + eqText(m.captured) + ' = 14，收走这组牌' + (best ? '（目前最划算）' : '') + '</div>' +
         '<div class="coach-stepnav"><button id="coachPrev" class="coach-step">‹ 上一步</button>' +
         '<button id="coachUse" class="coach-step use">就用这手出</button>' +
@@ -113,7 +126,7 @@ function renderCoach() {
           '<span class="coach-gain">' + (best ? '最划算' : '') + '</span>' +
           (best ? '<span class="rec">推荐</span>' : '') + '</div>';
       }).join('');
-      panel.innerHTML = '<div class="coach-h">🧑‍🏫 教练 · 本回合 ' + coachMoves.length + ' 种凑法（点任一行直接选）' + stepBtn + '</div>' +
+      panel.innerHTML = '<div class="coach-h">💡 提示 · 本回合 ' + coachMoves.length + ' 种凑法（点任一行直接选）' + stepBtn + '</div>' +
         '<div class="coach-rows">' + rows + '</div>';
     }
   } else if (ui.mode === 'replace') {
@@ -129,7 +142,7 @@ function renderCoach() {
       const keepTxt = sc.path > 0 ? '留手上也还能凑牌' : '留手上基本没用';
       body += '<div class="coach-b">收完要补 1 张到桌面。建议补 <b>' + cardName(sc.card) + '</b>：放它上桌' + riskTxt + '，而且' + keepTxt + '。点它就补这张。</div>';
     }
-    panel.innerHTML = '<div class="coach-h">🧑‍🏫 教练 ' + stepBtn + '</div>' + body;
+    panel.innerHTML = '<div class="coach-h">💡 提示 ' + stepBtn + '</div>' + body;
   }
   const sb = $('coachStepModeBtn'); if (sb) sb.onclick = function () { coachStepMode = !coachStepMode; if (coachStepMode) coachStepIdx = 0; renderCoach(); };
   panel.querySelectorAll('.coach-row').forEach(function (r) { r.onclick = function () { const idx = parseInt(r.getAttribute('data-idx'), 10); if (!isNaN(idx)) applyCoachCombo(coachMoves[idx]); }; });
@@ -1241,6 +1254,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ng = $('newGame'); if (ng && ng.addEventListener) ng.addEventListener('click', onRestartClick);
   const ct = $('coachToggleStart'); if (ct && ct.addEventListener) ct.addEventListener('click', function () { setCoach(!coachOn); });
   const cbtn = $('coachBtn'); if (cbtn && cbtn.addEventListener) cbtn.addEventListener('click', function () { setCoach(!coachOn); });
+  const nd = $('coachNudge'); if (nd && nd.addEventListener) nd.addEventListener('click', function () { setCoach(true); });
   const on = $('overNew'); if (on && on.addEventListener) on.addEventListener('click', restartSame);
   const rc = $('restartCancel'); if (rc && rc.addEventListener) rc.addEventListener('click', closeRestartConfirm);
   const ro = $('restartOk'); if (ro && ro.addEventListener) ro.addEventListener('click', confirmRestart);

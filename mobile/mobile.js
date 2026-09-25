@@ -91,7 +91,19 @@ function updateCoachNudge() {
   try { seen = localStorage.getItem('h14_coach_nudge') === '1'; } catch (e) {}
   const show = !coachOn && !seen && state && state.turn === 'player' && state.phase === 'playing' && ui.mode === 'select';
   n.classList.toggle('show', show);
-  if (show) n.textContent = '不会出牌？点我看推荐走法 →';
+  if (show) {
+    n.textContent = '不会出牌？点我看推荐走法 →';
+    const tb = $('topbar'), c = $('coachBtn');
+    if (tb) n.style.top = (tb.getBoundingClientRect().height + 6) + 'px';
+    if (c) {
+      const r = c.getBoundingClientRect();
+      const right = Math.max(20, window.innerWidth - r.left - r.width / 2);
+      n.style.setProperty('--nudge-arrow-right', right + 'px');
+    }
+  } else {
+    n.style.top = '';
+    n.style.removeProperty('--nudge-arrow-right');
+  }
 }
 
 function renderCoach() {

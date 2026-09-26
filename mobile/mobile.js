@@ -17,6 +17,8 @@ const T_HAND_OFF = 380;
 const T_PENALTY_OUT = 380;
 const T_SAY_MIN = 2200;
 const T_SAY_MAX = 9000;
+const T_PLAYER_LIFT = 360;   // 玩家合牌：圈定后抬起停留
+const T_PLAYER_READ = 1100;  // 玩家合牌：亮出等式/得分停留（轻量，比 NPC 短）
 const sayDur = (text) => {
   const s = String(text || '');
   let chars = 0;
@@ -443,70 +445,75 @@ function after(ms, fn) {
 function eqText(cards) { return cards.map((c) => (c.short ? c.short + c.suitSymbol : c.label + c.suitSymbol)).join(' + '); }
 function cardName(c) { return c.short + c.suitSymbol; }
 
-// ---------- NPC 卡通形象（圆滚滚小可爱机器人，卡哇伊） ----------
-const NC = '#3a3a3a';
+// ---------- NPC 卡通形象（圆滚滚小可爱，卡哇伊升级版：大圆眼 + 双高光 + 腮红 + 心形天线 + 闪粉） ----------
+const NC = '#4a3b42';
+const NPCH = '#ff9ec4';
+// 大圆眼（带主/次双高光，萌点所在）
+function eyeBig(kind) {
+  const r = kind === 'shock' ? 8.2 : 7.6;
+  const cy = kind === 'think' ? 35 : (kind === 'shock' ? 39 : 38);
+  const px = kind === 'think' ? 27.6 : 27, py = kind === 'think' ? 32.4 : 35.6;
+  const sx = kind === 'think' ? 29.2 : 29.4, sy = kind === 'think' ? 36 : 38.6;
+  return '<circle cx="27" cy="' + cy + '" r="' + r + '" fill="' + NC + '"/><circle cx="45" cy="' + cy + '" r="' + r + '" fill="' + NC + '"/>' +
+    '<circle cx="' + px + '" cy="' + py + '" r="2.7" fill="#fff"/><circle cx="' + (px + 18) + '" cy="' + py + '" r="2.7" fill="#fff"/>' +
+    '<circle cx="' + sx + '" cy="' + sy + '" r="1.4" fill="#fff" opacity=".9"/><circle cx="' + (sx + 18) + '" cy="' + sy + '" r="1.4" fill="#fff" opacity=".9"/>';
+}
+// 弯弯笑眼 ^ ^（开心 / 难过下垂眼）
+function eyeArc(kind) {
+  if (kind === 'happy') {
+    return '<path d="M20 39 q7 -8 14 0" stroke="' + NC + '" stroke-width="3.6" fill="none" stroke-linecap="round"/>' +
+      '<path d="M38 39 q7 -8 14 0" stroke="' + NC + '" stroke-width="3.6" fill="none" stroke-linecap="round"/>';
+  }
+  return '<path d="M20 40 q7 7 14 0" stroke="' + NC + '" stroke-width="3.6" fill="none" stroke-linecap="round"/>' +
+    '<path d="M38 40 q7 7 14 0" stroke="' + NC + '" stroke-width="3.6" fill="none" stroke-linecap="round"/>' +
+    '<path d="M22 44 q1.7 5 0 8.4 q-1.7 -3.2 0 -8.4 z" fill="#8fd0ff" stroke="#5aa" stroke-width="0.7"/>';
+}
+// 星星眼（贪心：看到高分牌眼睛变星）
+function eyeStar() {
+  const star = (cx) => '<path d="M' + cx + ' 30 L' + (cx + 2) + ' 35 L' + (cx + 7) + ' 36 L' + (cx + 2) + ' 38 L' + cx + ' 43 L' + (cx - 2) + ' 38 L' + (cx - 7) + ' 36 L' + (cx - 2) + ' 35 Z" fill="#ffd43b" stroke="#e88" stroke-width="1.2" stroke-linejoin="round"/>';
+  return star(27) + star(45);
+}
 const NPC_FACES = {
-  idle: {
-    halo: '#bdeacb',
-    eye: '<circle cx="27" cy="38" r="6.5" fill="' + NC + '"/><circle cx="45" cy="38" r="6.5" fill="' + NC + '"/>' +
-         '<circle cx="29" cy="35.5" r="2.4" fill="#fff"/><circle cx="47" cy="35.5" r="2.4" fill="#fff"/>',
-    mouth: '<path d="M31 49 q5 4.5 10 0" stroke="' + NC + '" stroke-width="2.6" fill="none" stroke-linecap="round"/>',
-  },
-  think: {
-    halo: '#d9c8ff',
-    eye: '<circle cx="27" cy="39" r="6.5" fill="#fff" stroke="' + NC + '" stroke-width="2"/>' +
-         '<circle cx="45" cy="39" r="6.5" fill="#fff" stroke="' + NC + '" stroke-width="2"/>' +
-         '<circle cx="27" cy="37" r="3" fill="' + NC + '"/><circle cx="45" cy="37" r="3" fill="' + NC + '"/>' +
-         '<circle cx="28.2" cy="35.8" r="1.1" fill="#fff"/><circle cx="46.2" cy="35.8" r="1.1" fill="#fff"/>',
-    mouth: '<ellipse cx="36" cy="50" rx="2.6" ry="3.2" fill="' + NC + '"/>',
-  },
-  happy: {
-    halo: '#ffe6a0',
-    eye: '<path d="M21 38 q6 -7 12 0" stroke="' + NC + '" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
-         '<path d="M39 38 q6 -7 12 0" stroke="' + NC + '" stroke-width="3.2" fill="none" stroke-linecap="round"/>',
-    mouth: '<path d="M29 47 q7 11 14 0 z" fill="' + NC + '"/>' +
-           '<path d="M32 51 q4 3 8 0" stroke="#ff9ec4" stroke-width="2.2" fill="none"/>',
-  },
-  greedy: {
-    halo: '#ffd2a8',
-    eye: '<path d="M27 31 L29 36 L34 38 L29 40 L27 45 L25 40 L20 38 L25 36 Z" fill="#ffd43b" stroke="#e88" stroke-width="1.4" stroke-linejoin="round"/>' +
-         '<path d="M45 31 L47 36 L52 38 L47 40 L45 45 L43 40 L38 38 L43 36 Z" fill="#ffd43b" stroke="#e88" stroke-width="1.4" stroke-linejoin="round"/>',
-    mouth: '<path d="M28 47 q8 12 16 0 z" fill="' + NC + '"/>' +
-           '<path d="M33 51 q3 4 6 0 z" fill="#ff9ec4"/>',
-  },
-  shock: {
-    halo: '#ffc2d6',
-    eye: '<circle cx="27" cy="38" r="7" fill="#fff" stroke="' + NC + '" stroke-width="2"/>' +
-         '<circle cx="45" cy="38" r="7" fill="#fff" stroke="' + NC + '" stroke-width="2"/>' +
-         '<circle cx="27" cy="38" r="3.2" fill="' + NC + '"/><circle cx="45" cy="38" r="3.2" fill="' + NC + '"/>',
-    mouth: '<ellipse cx="36" cy="50" rx="3.6" ry="4.4" fill="' + NC + '"/>',
-  },
-  sad: {
-    halo: '#d8d2cb',
-    eye: '<path d="M21 40 q6 5 12 0" stroke="' + NC + '" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
-         '<path d="M39 40 q6 5 12 0" stroke="' + NC + '" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
-         '<path d="M22 44 q1.5 4 0 6 q-1.5 -2 0 -6 z" fill="#8fd0ff" stroke="#5aa" stroke-width="0.8"/>',
-    mouth: '<path d="M30 51 q6 -5 12 0" stroke="' + NC + '" stroke-width="2.8" fill="none" stroke-linecap="round"/>',
-  },
+  idle: { halo: '#cdeede', eye: eyeBig('idle'),
+    mouth: '<path d="M30 50 q6 5 12 0" stroke="' + NC + '" stroke-width="2.6" fill="none" stroke-linecap="round"/>' },
+  think: { halo: '#ddd2ff', eye: eyeBig('think'),
+    mouth: '<ellipse cx="36" cy="51" rx="2.8" ry="3.4" fill="' + NC + '"/>' },
+  happy: { halo: '#ffe9a8', eye: eyeArc('happy'),
+    mouth: '<path d="M28 48 q8 11 16 0 z" fill="' + NC + '"/><path d="M31 51 q5 4 10 0" stroke="#ff9ec4" stroke-width="2" fill="none"/>' },
+  greedy: { halo: '#ffd9b0', eye: eyeStar(),
+    mouth: '<path d="M27 49 q9 13 18 0 z" fill="' + NC + '"/><path d="M33 53 q3 4 6 0 z" fill="#ff9ec4"/>' },
+  shock: { halo: '#ffc8db', eye: eyeBig('shock'),
+    mouth: '<ellipse cx="36" cy="51" rx="3.8" ry="4.6" fill="' + NC + '"/>' },
+  sad: { halo: '#dcd6cf', eye: eyeArc('sad'),
+    mouth: '<path d="M30 52 q6 -5 12 0" stroke="' + NC + '" stroke-width="2.8" fill="none" stroke-linecap="round"/>' },
 };
 function npcFaceSvg(mood) {
   const f = NPC_FACES[mood] || NPC_FACES.idle;
-  return '<svg viewBox="0 0 72 72" width="100%" height="100%" aria-hidden="true">' +
-    '<circle cx="36" cy="38" r="32" fill="' + f.halo + '"/>' +
-    '<path d="M36 9 v-4" stroke="#e58" stroke-width="2" stroke-linecap="round"/>' +
-    '<path d="M36 3.5 l2.6 2.6 l-2.6 2.6 l-2.6 -2.6 z" fill="#ff7aa8" stroke="#ff5d8f" stroke-width="1"/>' +
-    '<circle cx="9" cy="40" r="6" fill="#ffe0ec" stroke="#ff9ec4" stroke-width="2"/>' +
-    '<circle cx="63" cy="40" r="6" fill="#ffe0ec" stroke="#ff9ec4" stroke-width="2"/>' +
-    '<rect x="11" y="19" width="50" height="46" rx="23" fill="#fff7fb" stroke="#ff9ec4" stroke-width="2.6"/>' +
-    '<ellipse cx="19" cy="47" rx="5.5" ry="3.8" fill="#ff9ec4" opacity="0.8"/>' +
-    '<ellipse cx="53" cy="47" rx="5.5" ry="3.8" fill="#ff9ec4" opacity="0.8"/>' +
-    f.eye + f.mouth +
-    '</svg>';
+  const face =
+    '<circle cx="36" cy="36" r="32" fill="' + f.halo + '"/>' +
+    // 心形天线
+    '<path d="M36 10 v-5" stroke="#e58" stroke-width="2" stroke-linecap="round"/>' +
+    '<path d="M36 2.4 c-2.4 -3 -7 -1.2 -7 2.2 c0 2.6 3.4 4.6 7 7.4 c3.6 -2.8 7 -4.8 7 -7.4 c0 -3.4 -4.6 -5.2 -7 -2.2 z" fill="#ff7aa8" stroke="#ff5d8f" stroke-width="0.8"/>' +
+    // 闪粉星（左上 / 右下）
+    '<path d="M13 24 l1.4 3 l3 1.4 l-3 1.4 l-1.4 3 l-1.4 -3 l-3 -1.4 l3 -1.4 z" fill="#fff" opacity=".75"/>' +
+    '<path d="M58 50 l1 2.2 l2.2 1 l-2.2 1 l-1 2.2 l-1 -2.2 l-2.2 -1 l2.2 -1 z" fill="#fff" opacity=".6"/>' +
+    // 圆脸
+    '<circle cx="36" cy="41" r="25" fill="#fff7fb" stroke="' + NPCH + '" stroke-width="2.8"/>' +
+    // 腮红
+    '<ellipse cx="22" cy="47" rx="5.2" ry="3.6" fill="#ff9ec4" opacity=".7"/>' +
+    '<ellipse cx="50" cy="47" rx="5.2" ry="3.6" fill="#ff9ec4" opacity=".7"/>' +
+    f.eye + f.mouth;
+  return '<svg viewBox="0 0 72 72" width="100%" height="100%" aria-hidden="true">' + face + '</svg>';
 }
 
-// NPC 说话：全部走顶部一行轻量气泡（砍掉桌面版大娃娃 + 座位小气泡两种）
+// NPC 说话：全部走顶部一行轻量气泡（砍掉桌面版大娃娃 + 座位小气泡两种）；气泡自带卡哇伊头像
 let bubbleGen = 0;
-function setNpcMood(mood) { const el = $('npcAvatar'); if (el) el.innerHTML = npcFaceSvg(mood); }
+let npcMood = 'idle';
+function setNpcMood(mood) {
+  npcMood = mood;
+  const el = $('npcAvatar'); if (el) el.innerHTML = npcFaceSvg(mood);
+  const ba = $('npcSayAvatar'); if (ba) ba.innerHTML = npcFaceSvg(mood);   // 气泡里的头像同步
+}
 function npcSay(event, chance) {
   if (!A || !A.npcSay || !state || state.phase === 'gameover') return;
   const line = A.npcSay(event, { chance: chance });
@@ -514,10 +521,11 @@ function npcSay(event, chance) {
   setNpcMood(line.mood);
   showNpcBubble(line.text);
 }
+// 气泡 = 卡哇伊头像 + 文字
 function showNpcBubble(text) {
   const el = $('npcSay');
   if (!el) return;
-  el.textContent = text;
+  el.innerHTML = '<span id="npcSayAvatar" class="npc-say-avatar">' + npcFaceSvg(npcMood) + '</span><span class="npc-say-text">' + text + '</span>';
   if (el.classList) { el.classList.remove('hidden'); el.classList.add('show'); }
   const g = ++bubbleGen;
   after(sayDur(text), () => { if (g === bubbleGen && el.classList) { el.classList.remove('show'); el.classList.add('hidden'); } });
@@ -581,6 +589,7 @@ function newGame() {
   ui.mode = 'idle'; ui.valid = false; snap = null;
   $('overModal').classList.add('hidden');
   hideNpcShow();
+  hidePlayerShow();
   setNpcMood('idle');
   hideNpcBubble();
   const eSh = H14_SHIFT && H14_SHIFT[npcDifficulty];
@@ -682,6 +691,7 @@ function confirmMatch() {
   const handCards = state.playerHand.filter((c) => ui.selHand.includes(c.id));
   const tableCard = state.table.find((c) => c.id === ui.selTable);
   const move = { handCards, tableCard, captured: handCards.concat([tableCard]) };
+  const captured = move.captured;
   const gain = Math.round(G.sumScore(move.captured) * 100) / 100;
   const sum = G.sumMatchValue(handCards) + tableCard.matchValue;
   const ep = episode;
@@ -694,26 +704,42 @@ function confirmMatch() {
   if (coachOn) coachHint = { hand: new Set(), table: new Set(), bestHand: new Set(), bestTable: new Set() };
   snd('flip');
 
+  // 玩家也走"圈定 → 抬起 → 亮出等式/得分 → 收牌"的过程，与 NPC 一致（只是更轻量）
   ui.mode = 'merging';
-  ui.mergePlan = { tableId: tableCard.id, handIds: handCards.map((c) => c.id), stage: 'lock' };
+  ui.mergePlan = { tableId: tableCard.id, handIds: handCards.map((c) => c.id), stage: 'lock', player: true };
   setMessage('🔗 已圈住桌面的 ' + cardName(tableCard) + '：' + eqText(handCards) + ' = ' + sum + '，合牌中…');
   toast('圈定 ' + eqText(move.captured) + ' = ' + sum, 'good');
   renderControls();
   renderAll();
 
-  setTimeout(() => {
+  after(T_PLAYER_LIFT, () => {
     if (ep !== episode || !ui.mergePlan) return;
-    ui.mergePlan.stage = 'merge';
+    ui.mergePlan.stage = 'lift';
     renderAll();
-    setTimeout(() => {
+    after(T_PLAYER_LIFT, () => {
       if (ep !== episode || !ui.mergePlan) return;
-      ui.mergePlan = null;
-      finishPlayerMerge(move, gain);
-    }, T_NPC_MERGE);
-  }, T_NPC_LIFT);
+      ui.mergePlan.stage = 'reveal';
+      setMessage('✅ 你凑成了：' + eqText(captured) + ' = ' + sum + '，收走 ' + captured.length + ' 张！');
+      showPlayerShow(playerShowSimpleHtml(captured, sum, gain, captured.length, captured.some((c) => c.isJoker)));
+      renderAll();
+      after(T_PLAYER_READ, () => {
+        if (ep !== episode || !ui.mergePlan) return;
+        ui.mergePlan.stage = 'merge';
+        markPlayerShowMerge();
+        setMessage('🔗 合牌：' + eqText(captured) + ' = ' + sum + '，收走 ' + captured.length + ' 张。');
+        renderAll();
+        after(T_NPC_MERGE, () => {
+          if (ep !== episode || !ui.mergePlan) return;
+          ui.mergePlan = null;
+          finishPlayerMerge(move, gain);
+        });
+      });
+    });
+  });
 }
 
 function finishPlayerMerge(move, gain) {
+  hidePlayerShow();   // 收牌时收掉玩家亮牌浮层
   recordPlayDecision(move);
   G.capture(state, 'player', move);
   ui.selHand = []; ui.selTable = null; ui.valid = false;
@@ -789,7 +815,8 @@ function endPlayerTurn() {
 }
 
 // ---------- NPC 亮牌浮层（轻量：牌面 + 等式 + 得分，不逐张翻） ----------
-function npcShowSimpleHtml(captured, sum, gain, n, gotJoker) {
+// 通用"亮牌"浮层构造：头部带卡哇伊头像 + 文字；谁在亮牌由 whoLabel/mood 决定；me=true 玩家绿主题
+function showCardsHtml(captured, sum, gain, n, gotJoker, whoLabel, mood, me) {
   const cards = captured.map((c) => {
     const el = cardEl(c, false);
     el.classList.add('revealed');
@@ -797,8 +824,16 @@ function npcShowSimpleHtml(captured, sum, gain, n, gotJoker) {
   }).join('<span class="plus"> + </span>');
   const eq = '<div class="npc-show-eq">' + eqText(captured) + ' = ' + sum +
     ' <span class="ok">✅</span><br><span class="gain">收获 ' + n + ' 张 · +' + gain + ' 分</span></div>';
-  return '<div class="npc-show-box"><div class="npc-show-head">🤖 NPC 亮牌' + (gotJoker ? '（捞到王！）' : '') + '</div>' +
+  const avatar = '<span class="npc-show-avatar">' + npcFaceSvg(mood || 'happy') + '</span>';
+  return '<div class="npc-show-box' + (me ? ' me' : '') + '"><div class="npc-show-head' + (me ? ' me' : '') + '">' +
+    avatar + whoLabel + (gotJoker ? '（捞到王！）' : '') + '</div>' +
     '<div class="npc-show-cards">' + cards + '</div>' + eq + '</div>';
+}
+function npcShowSimpleHtml(captured, sum, gain, n, gotJoker) {
+  return showCardsHtml(captured, sum, gain, n, gotJoker, 'NPC 亮牌', gotJoker ? 'greedy' : 'happy', false);
+}
+function playerShowSimpleHtml(captured, sum, gain, n, gotJoker) {
+  return showCardsHtml(captured, sum, gain, n, gotJoker, '你凑成了', 'happy', true);
 }
 function showNpcShow(html) {
   const el = $('npcShow');
@@ -806,9 +841,21 @@ function showNpcShow(html) {
   el.innerHTML = html;
   if (el.classList) el.classList.remove('hidden');
 }
+function showPlayerShow(html) {
+  const el = $('playerShow');
+  if (!el) return;
+  el.innerHTML = html;
+  if (el.classList) el.classList.remove('hidden');
+}
 function markNpcShowMerge() { const el = $('npcShow'); if (el && el.classList) el.classList.add('merging'); }
+function markPlayerShowMerge() { const el = $('playerShow'); if (el && el.classList) el.classList.add('merging'); }
 function hideNpcShow() {
   const el = $('npcShow');
+  if (el && el.classList) { el.classList.add('hidden'); el.classList.remove('merging'); }
+  if (el) el.innerHTML = '';
+}
+function hidePlayerShow() {
+  const el = $('playerShow');
   if (el && el.classList) { el.classList.add('hidden'); el.classList.remove('merging'); }
   if (el) el.innerHTML = '';
 }
@@ -818,6 +865,7 @@ function npcTurn() {
   ui.mode = 'idle'; ui.valid = false; ui.selHand = []; ui.selTable = null;
   ui.mergePlan = null; ui.penPlan = null;
   hideNpcShow();
+  hidePlayerShow();
   setNpcMood('think');
   setMessage('🤖 NPC 思考中…');
   renderControls();
@@ -934,6 +982,7 @@ function showOver() {
   const fmt = (arr) => arr.length ? arr.map((c) => c.label).join('、') : '（无）';
 
   hideNpcBubble();
+  hidePlayerShow();
   $('overTitle').textContent = '本局结束';
   $('overBody').innerHTML =
     '<div class="winner">' + winner + '</div>' +
@@ -987,9 +1036,12 @@ function renderAll() {
     if (plan && plan.tableId === c.id) {
       el.classList.add('ringed');
       if (plan.stage === 'merge') el.classList.add('merge-target');
-      else if (plan.stage === 'point' || plan.stage === 'lift') {
+      else if (plan.player && (plan.stage === 'lift' || plan.stage === 'reveal')) {
+        el.classList.add('lifted', 'ring-lock');   // 玩家：抬起 + 锁定（不带 NPC 橙箭头）
+      } else if (plan.stage === 'point') {
         el.classList.add('npc-point');
-        if (plan.stage === 'lift') el.classList.add('lifted');
+      } else if (!plan.player && (plan.stage === 'lift')) {
+        el.classList.add('npc-point', 'lifted');
         const ar = document.createElement('div'); ar.className = 'npc-arrow'; el.appendChild(ar);
       } else if (plan.stage === 'flip' || plan.stage === 'read') {
         el.classList.add('npc-point');
@@ -1013,7 +1065,10 @@ function renderAll() {
     const el = cardEl(c);
     el.dataset.id = c.id;
     if (isNewHand.has(c.id)) el.classList.add('in-hand');
-    if (plan && plan.stage === 'merge' && plan.handIds.indexOf(c.id) >= 0) el.classList.add('merge-to');
+    if (plan && plan.handIds.indexOf(c.id) >= 0 && (plan.stage === 'merge' || plan.stage === 'lift' || plan.stage === 'reveal')) {
+      el.classList.add('merge-to');
+      if (plan.stage === 'lift' || plan.stage === 'reveal') el.classList.add('lifted');
+    }
     else if (ui.penPlan === c.id) el.classList.add('penalty-out');
     else if ((ui.mode === 'select' || ui.mode === 'replace') && ui.selHand.includes(c.id)) el.classList.add('selected');
     else if (coachOn && coachHint.hand.has(c.id)) { el.classList.add('coach-hint'); if (coachHint.bestHand.has(c.id)) el.classList.add('coach-hint-best'); }

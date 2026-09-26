@@ -84,19 +84,22 @@ html, body {
 #npcArea .npc-meta { display: flex; gap: 12px; font-size: 14px; color: #c9d6c9; }
 #npcArea .npc-meta b { color: #fff; }
 
-/* NPC 说话气泡（顶部一行，替代大娃娃） */
+/* NPC 说话气泡（顶部一行，替代大娃娃）；气泡自带卡哇伊头像 */
 #npcSay {
   flex: 0 0 auto;
   align-self: flex-start;
   margin: 0 4px;
   max-width: 92%;
+  display: flex; align-items: center; gap: 8px;
   background: #2b2b2b;
   border: 1px solid #555;
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 6px 12px;
   font-size: 15px;
   color: #ffe9b0;
 }
+.npc-say-avatar { width: 34px; height: 34px; flex: 0 0 auto; }
+.npc-say-text { flex: 1 1 auto; }
 #npcSay.hidden { display: none; }
 
 /* 桌面牌区 */
@@ -336,6 +339,11 @@ html, body {
 .npc-show-eq .ok { color: #69db7c; }
 .npc-show-eq .gain { display: block; font-size: 16px; color: #ffd43b; margin-top: 4px; }
 .npc-show.merging .npc-show-box { box-shadow: 0 0 0 3px #ffd43b88; }
+/* 玩家亮牌浮层：复用 npc-show 结构，但背景更轻 + 绿主题（玩家"你凑成了"） */
+#playerShow { background: rgba(8,26,16,0.6); z-index: 285; }
+.npc-show-avatar { width: 30px; height: 30px; display: inline-block; vertical-align: middle; margin-right: 6px; }
+.npc-show-head.me { color: #b2f2bb; }
+.npc-show-box.me { border-color: #3a7a4a; }
 
 /* ==================================================================
    标题画面（游戏入场）· 风格 A 经典牌桌：墨绿绒布 + 香槟金 + 衬线品牌字

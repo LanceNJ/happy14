@@ -199,6 +199,12 @@ body {
 .card:hover { transform: translateY(calc(var(--card-h) * -0.07)); }
 .card.red { color: #d92b2b; }
 .card:not(.red) { color: #222; }
+/* 被凑掉的桌牌位置：留一个同尺寸的空槽，其余牌不动；补牌后由内核填空位 */
+.card-gap {
+  background: repeating-linear-gradient(45deg, rgba(255,255,255,0.04), rgba(255,255,255,0.04) 7px, rgba(255,255,255,0.10) 7px, rgba(255,255,255,0.10) 14px);
+  border: 2px dashed rgba(255,255,255,0.28);
+  box-shadow: none;
+}
 .card .corner { font-size: calc(var(--card-h) * 0.20); font-weight: 900; line-height: 1; }
 .card .center {
   font-size: calc(var(--card-h) * 0.38);

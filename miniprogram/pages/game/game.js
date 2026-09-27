@@ -819,7 +819,7 @@ Page({
     // 对比上一帧，找出"新出现的牌"，让它们播入场动画
     const prev = this._snap;
     const freshList = (list, key) => (prev ? list.filter((id) => prev[key].indexOf(id) < 0) : list);
-    const nT = freshList(g.table.map((c) => c.id), 'table');
+    const nT = freshList(g.table.map((c) => c ? c.id : null), 'table');
     const nP = freshList(g.playerHand.map((c) => c.id), 'playerHand');
     const nN = freshList(g.npcHand.map((c) => c.id), 'npcHand');
 
@@ -833,6 +833,7 @@ Page({
 
     // 桌面：被圈的牌（NPC 三拍演出 / 合牌目标）优先于普通选中
     const table = g.table.map((c) => {
+      if (!c) return { gap: true, id: 'gap' };   // 被凑掉的桌牌位置留空槽，其余牌不动
       const isPlan = !!(plan && plan.tableId === c.id);
       const sel = isSel && ui.selTable === c.id;
       const st = isPlan ? plan.stage : '';
@@ -908,7 +909,7 @@ Page({
     }
 
     this._snap = {
-      table: g.table.map((c) => c.id),
+      table: g.table.map((c) => c ? c.id : null),
       playerHand: g.playerHand.map((c) => c.id),
       npcHand: g.npcHand.map((c) => c.id),
       draw: g.drawPile.length,

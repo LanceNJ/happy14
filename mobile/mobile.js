@@ -1017,7 +1017,7 @@ function cardEl(card, back) {
 function renderAll() {
   if (!state) return;
   const cur = {
-    table: state.table.map((c) => c.id),
+    table: state.table.map((c) => c ? c.id : null),
     playerHand: state.playerHand.map((c) => c.id),
     draw: state.drawPile.length,
   };
@@ -1030,6 +1030,13 @@ function renderAll() {
   // 桌面
   const t = $('table'); t.innerHTML = '';
   state.table.forEach((c) => {
+    if (!c) {
+      // 被凑掉的那张桌牌位置：留空槽，其余牌纹丝不动（与内核"留空位/填空位"对应）
+      const gap = document.createElement('div');
+      gap.className = 'card card-gap';
+      t.appendChild(gap);
+      return;
+    }
     const el = cardEl(c);
     el.dataset.id = c.id;
     if (isNewTable.has(c.id)) el.classList.add('in-table');

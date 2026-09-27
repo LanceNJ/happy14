@@ -166,6 +166,12 @@ html, body {
 }
 .card.red { color: #d11; }
 .card:not(.red) { color: #1a1a1a; }
+/* 被凑掉的桌牌位置：留一个同尺寸的空槽，其余牌不动；补牌后由内核填空位 */
+.card-gap {
+  background: repeating-linear-gradient(45deg, rgba(255,255,255,0.04), rgba(255,255,255,0.04) 7px, rgba(255,255,255,0.10) 7px, rgba(255,255,255,0.10) 14px);
+  border: 2px dashed rgba(255,255,255,0.28);
+  box-shadow: none;
+}
 .card .center {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   line-height: 1; font-weight: 800; gap: calc(var(--card-h) * 0.03);

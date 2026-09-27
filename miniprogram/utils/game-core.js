@@ -102,6 +102,7 @@ function findMoves(hand, table) {
     for (let i = 0; i < n; i++) if (mask & (1 << i)) subset.push(hand[i]);
     const handSum = sumMatchValue(subset);
     for (const t of table) {
+      if (!t) continue;
       if (handSum + t.matchValue === 14) {
         const captured = subset.concat([t]);
         moves.push({
@@ -168,8 +169,8 @@ function capture(state, who, move) {
   const lk = lootKey(who);
   const capIds = new Set(move.handCards.map((c) => c.id));
   const tIdx = state.table.findIndex((c) => c.id === move.tableCard.id);
-  state.lastCaptureTableIdx = tIdx;   // 记下列被收走的位置，补牌时把新牌塞回原位，桌面其余牌保持原次序不动
-  if (tIdx >= 0) state.table.splice(tIdx, 1);
+  state.lastCaptureTableIdx = tIdx;   // 记下列被收走的位置；桌面留一个空位(null)，补牌时直接填空位，其余桌牌纹丝不动
+  if (tIdx >= 0) state.table[tIdx] = null;  // 留空位：被凑掉的牌位置先空着，补牌时填空位
   state[hk] = state[hk].filter((c) => !capIds.has(c.id));
   state[lk] = state[lk].concat(move.captured);
   state.log.push((who === 'player' ? '玩家' : 'NPC') + ' 匹配成功，收获 ' + move.captured.length + ' 张战利品');
@@ -179,9 +180,9 @@ function capture(state, who, move) {
 // 从手牌挑 1 张补到桌面（手牌空则从补牌堆拿 1 张），再把守牌补到 4
 function replaceAndRefill(state, who, replaceCardId) {
   const hk = handKey(who);
-  // 新牌（补回桌面的那张）插回「被收走的桌面位置」，其余桌牌不动；无记录则兜底追加到末尾
+  // 新牌（补回桌面的那张）填回「被收走的桌面位置」，其余桌牌不动；无记录则兜底追加到末尾
   const at = (typeof state.lastCaptureTableIdx === 'number' && state.lastCaptureTableIdx >= 0 && state.lastCaptureTableIdx <= state.table.length) ? state.lastCaptureTableIdx : null;
-  const putTable = (c) => { if (at === null) state.table.push(c); else state.table.splice(at, 0, c); };
+  const putTable = (c) => { if (at === null) state.table.push(c); else state.table[at] = c; };  // 填空位而非插入：其余牌绝不动
   if (state[hk].length === 0) {
     const d = drawOne(state);
     if (d) putTable(d);
@@ -196,6 +197,8 @@ function replaceAndRefill(state, who, replaceCardId) {
     if (!d) break;
     state[hk].push(d);
   }
+  // 残局兜底：手牌空且补牌堆也空时，空位永远补不上——把空位收掉，桌面合法变少一张，保持牌数守恒
+  if (at !== null && state.table[at] === null) state.table.splice(at, 1);
 }
 
 function penalty(state, who, cardId) {
@@ -379,7 +382,7 @@ function useRoutes(state, card) {
     const sel = [];
     for (let i = 0; i < n; i++) if (mask & (1 << i)) { s += others[i].matchValue; sel.push(others[i]); }
     const need = 14 - card.matchValue - s;
-    for (const t of table) if (t.matchValue === need) routes.push({ handCards: [card].concat(sel), tableCard: t });
+    for (const t of table) { if (!t) continue; if (t.matchValue === need) routes.push({ handCards: [card].concat(sel), tableCard: t }); }
   }
   return routes;
 }
@@ -400,12 +403,12 @@ function oneAwayStrength(state, card) {
     if (u <= 0) continue;
     const need = 14 - card.matchValue - r;
     if (need < 0 || need > 13) continue;
-    if (!table.some((t) => t.matchValue === need)) continue;
+    if (!table.some((t) => t && t.matchValue === need)) continue;
     best = Math.max(best, u / 8);
   }
   if (unseenOfRank(state, 14) + unseenOfRank(state, 15) > 0) {
     const need = 14 - card.matchValue;
-    if (need >= 0 && need <= 13 && table.some((t) => t.matchValue === need)) best = Math.max(best, 0.5);
+    if (need >= 0 && need <= 13 && table.some((t) => t && t.matchValue === need)) best = Math.max(best, 0.5);
   }
   return best;
 }
@@ -642,10 +645,10 @@ function chooseNpcAction(state, difficulty) {
   return chooseAction(state, 'npc', { difficulty: difficulty });
 }
 
-// 牌数守恒检查（调试用）
+// 牌数守恒检查（调试用）。桌面可能临时留空位(null)，按真实牌数计，不把空槽算进去
 function totalCards(state) {
   return (
-    state.table.length + state.playerHand.length + state.npcHand.length +
+    state.table.filter(Boolean).length + state.playerHand.length + state.npcHand.length +
     state.drawPile.length + state.playerLoot.length + state.npcLoot.length +
     state.playerPenalty.length + state.npcPenalty.length
   );
@@ -656,7 +659,7 @@ function totalCards(state) {
 //   可见（明牌）：桌面 6 张、我的手牌、我的战利品/罚牌、NPC 战利品（拿走时都是亮过的）
 //   未知：NPC 手牌、NPC 罚牌（隐藏）、补牌堆
 function visiblePool(state) {
-  return state.table
+  return state.table.filter(Boolean)
     .concat(state.playerHand, state.playerLoot, state.playerPenalty, state.npcLoot);
 }
 function unknownPool(state) {

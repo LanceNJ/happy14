@@ -12,12 +12,14 @@
     <view class="row-label">桌面（上下两行，共6张）</view>
     <view class="card-grid">
       <view wx:for="{{table}}" wx:key="id"
-            class="card {{item.red?'red':''}} {{item.isJoker?'joker':''}} {{item.selected?'selected':''}} {{item.isNew?'drop-in':''}} {{item.ringed?'ringed':''}} {{item.ringBad?'ring-bad':''}} {{item.npcPoint?'npc-point':''}} {{item.lifted?'lifted':''}} {{item.dimmed?'dimmed':''}} {{item.ringLock?'ring-lock':''}} {{item.mergeTarget?'merge-target':''}}"
+            class="card {{item.gap?'card-gap':''}} {{item.red?'red':''}} {{item.isJoker?'joker':''}} {{item.selected?'selected':''}} {{item.isNew?'drop-in':''}} {{item.ringed?'ringed':''}} {{item.ringBad?'ring-bad':''}} {{item.npcPoint?'npc-point':''}} {{item.lifted?'lifted':''}} {{item.dimmed?'dimmed':''}} {{item.ringLock?'ring-lock':''}} {{item.mergeTarget?'merge-target':''}}"
             bindtap="onTableTap" data-id="{{item.id}}">
+        <block wx:if="{{!item.gap}}">
         <view class="corner">{{item.isJoker ? item.label : item.short}}</view>
         <view class="center">{{item.suitSymbol}}</view>
         <!-- NPC 回合第 1 拍：卡通箭头指着它要吃的那张桌面牌 -->
         <view wx:if="{{item.npcPoint}}" class="npc-arrow"></view>
+        </block>
       </view>
     </view>
   </view>

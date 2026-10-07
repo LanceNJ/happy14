@@ -176,9 +176,9 @@ html, body {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   line-height: 1; font-weight: 800; gap: calc(var(--card-h) * 0.03);
 }
-.card .center .r { font-size: calc(var(--card-h) * 0.47); }
-.card .center .s { font-size: calc(var(--card-h) * 0.47); }
-.card.joker .center .jr { font-size: calc(var(--card-h) * 0.37); white-space: nowrap; }
+.card .center .r { font-size: calc(var(--card-h) * 0.42); }
+.card .center .s { font-size: calc(var(--card-h) * 0.30); }
+.card.joker .center .jr { font-size: calc(var(--card-h) * 0.26); white-space: nowrap; letter-spacing: -0.04em; }
 .card.back {
   background: repeating-linear-gradient(45deg, #1d4e89, #1d4e89 6px, #2b6cb0 6px, #2b6cb0 12px);
   border-color: #14305a;

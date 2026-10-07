@@ -382,6 +382,9 @@ function learnSummaryText() {
   const keys = Object.keys(G.DEFAULT_WEIGHTS);
   return '战绩：难 ' + s.hard.w + '胜' + s.hard.l + '负 · 地狱 ' + s.hell.w + '胜' + s.hell.l + '负 · 已复盘 ' + learned.reviewed + ' 局\n'
     + '引擎被反超：出牌 ' + learned.holes.play + ' 次（仅记录）· 补牌 ' + learned.holes.rep + ' · 罚牌 ' + learned.holes.pen + '\n'
+    + (learned.causes && (learned.causes.fed || learned.causes.routed)
+      ? '补牌失误败因（只读，不自动调参）：资敌 ' + learned.causes.fed + ' · 失后路 ' + learned.causes.routed + '\n'
+      : '')
     + (w ? '学习后权重：' + keys.map((k) => f(k, w)).join(' / ') + '\n' : '还没学到东西：权重 = 出厂默认\n')
     + '本档实际生效（强度 ' + sl.intensity + '）：' + keys.map((k) => f(k, sl.applied)).join(' / ');
 }

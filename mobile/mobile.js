@@ -579,11 +579,45 @@ function pulseEl(id, cls) {
   if (typeof setTimeout === 'function') setTimeout(() => el.classList.remove(c), 800);
 }
 
+// ---------- 同牌挑战（seed 发牌：同种子 = 同一副牌 + 同先手，链接发给朋友比分数） ----------
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let currentSeed = 0;          // 本局发牌种子（结算分享时带出去）
+let challenge = null;         // 从 URL 读到的挑战：{ s, d, score }
+let challengeUsed = false;    // 挑战种子只在进局第一局使用
+(function parseChallenge() {
+  try {
+    const q = new URLSearchParams(location.search);
+    const raw = q.get('s');
+    if (raw === null || raw === '') return;
+    const seed = parseInt(raw, 10);
+    if (!isFinite(seed)) return;
+    const d = q.get('d');
+    challenge = {
+      s: seed >>> 0,
+      d: (d && DIFF_DESC[d]) ? d : 'medium',
+      score: parseFloat(q.get('score')),
+    };
+  } catch (e) { /* file:// 等环境读不到 search 就当普通开局 */ }
+})();
+
 // ---------- 流程 ----------
 function newGame() {
+  if (challenge && !challengeUsed) { npcDifficulty = challenge.d; }   // 挑战局：按链接指定的难度打
   applyLearnWeights(npcDifficulty);   // 易/中=出厂权重；难吃一半、地狱全量（只有这两档会学）
   decideLog = []; pendingPlay = null;
-  state = G.createGame({ numDecks: 2, firstRandom: firstMoveRandom });
+  // 挑战种子只用一次：首局按链接发牌；之后再来一局换新种子（避免永远同一副牌）
+  const useChallenge = challenge && !challengeUsed;
+  if (useChallenge) challengeUsed = true;
+  currentSeed = useChallenge ? challenge.s : ((Math.random() * 0xffffffff) >>> 0);
+  const rng = useChallenge ? mulberry32(challenge.s) : undefined;
+  state = G.createGame({ numDecks: 2, firstRandom: firstMoveRandom, rng: rng });
   episode++;
   ui.selHand = []; ui.selTable = null; ui.noMoves = false; ui.mergePlan = null; ui.penPlan = null;
   ui.mode = 'idle'; ui.valid = false; snap = null;
@@ -595,6 +629,10 @@ function newGame() {
   const eSh = H14_SHIFT && H14_SHIFT[npcDifficulty];
   const dl = diffLabel(npcDifficulty) + (eSh && eSh !== npcDifficulty ? '·实按' + diffLabel(eSh) : '');
   setMessage('🎴 新一局开始！' + (state.turn === 'player' ? '你先手' : 'NPC 先手') + '（难度：' + dl + '）');
+  if (useChallenge) {
+    const cScore = isFinite(challenge.score) ? challenge.score.toFixed(2) : null;
+    setMessage('⚔️ 朋友发来的同牌挑战！同一副牌' + (cScore ? '，他拿了 ' + cScore + ' 分' : '') + '，看你能拿多少。');
+  }
   announceFirst();
   snd('deal'); snd('start');
   renderAll();
@@ -1001,6 +1039,32 @@ function showOver() {
   snd(ps > ns ? 'win' : ps < ns ? 'lose' : 'drawEnd');
 }
 
+// ---------- 结算分享：复制挑战链接（同一副牌 + 我的得分），发给朋友比一比 ----------
+function buildChallengeLink() {
+  const base = (location.origin && location.origin !== 'null' && /https?:/.test(location.origin))
+    ? location.origin + location.pathname
+    : 'https://h14-mobile-98661.app.workbuddy.host/';
+  return base + '?s=' + currentSeed + '&d=' + npcDifficulty + '&score=' + G.computeScore(state, 'player').toFixed(2);
+}
+function shareChallenge() {
+  const ps = G.computeScore(state, 'player');
+  const ns = G.computeScore(state, 'npc');
+  const verdict = ps > ns ? '赢了 NPC' : ps < ns ? '输给了 NPC' : '和 NPC 战平';
+  const text = '⚔️ 欢乐十四分·同牌挑战：这副牌我 ' + ps.toFixed(2) + ' 分（' + verdict +
+    '），敢不敢来比比？同一副牌、同一个 NPC 👉 ' + buildChallengeLink();
+  const done = () => toast('挑战链接已复制，发给朋友吧！', 'ok');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else { fallbackCopy(text, done); }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请手动复制链接'); }
+  if (document.body.removeChild) document.body.removeChild(ta);
+}
+
 // ---------- 渲染 ----------
 function cardEl(card, back) {
   const d = document.createElement('div');
@@ -1169,7 +1233,7 @@ function requestNewGame() {
   openDiffAsk();
 }
 function openDiffAsk() {
-  pendingDiff = npcDifficulty;
+  pendingDiff = (challenge && !challengeUsed && challenge.d) ? challenge.d : npcDifficulty;   // 挑战局：默认锁链接指定的难度
   const m = $('diffModal');
   if (!m || !m.classList) { newGame(); maybeFirstHelp(); return; }
   const om = $('overModal'); if (om && om.classList) om.classList.add('hidden');
@@ -1330,6 +1394,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cbtn = $('coachBtn'); if (cbtn && cbtn.addEventListener) cbtn.addEventListener('click', function () { setCoach(!coachOn); });
   const nd = $('coachNudge'); if (nd && nd.addEventListener) nd.addEventListener('click', function () { setCoach(true); });
   const on = $('overNew'); if (on && on.addEventListener) on.addEventListener('click', restartSame);
+  const och = $('overChallenge'); if (och && och.addEventListener) och.addEventListener('click', shareChallenge);
   const rc = $('restartCancel'); if (rc && rc.addEventListener) rc.addEventListener('click', closeRestartConfirm);
   const ro = $('restartOk'); if (ro && ro.addEventListener) ro.addEventListener('click', confirmRestart);
   const ds = $('diffSeg');

@@ -262,6 +262,14 @@ html, body {
   font-size: 18px; font-weight: 700;
 }
 .modal .box .go:active { transform: scale(.97); }
+.challenge-btn {
+  display: block; width: 100%;
+  margin-top: 14px; padding: 13px;
+  border: 1.5px solid #d9a441; border-radius: 12px;
+  background: rgba(217, 164, 65, .12); color: #ffe08a;
+  font-size: 16px; font-weight: 700;
+}
+.challenge-btn:active { transform: scale(.97); }
 .restart-actions { display: flex; gap: 10px; margin-top: 14px; }
 .restart-actions .go { margin-top: 0; }
 .go.ghost { background: #444; color: #eee; }

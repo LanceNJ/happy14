@@ -183,6 +183,9 @@ const diffLabel = (d) => ({ easy: '容易', medium: '中等', hard: '难', hell:
 // 所以学的是"引擎哪条轴判偏了、该往哪偏"，不是把具体牌面抄下来。
 const LEARN_KEY = 'h14_learn_v1';
 const LEARN_STEP = { hard: 0.03, hell: 0.06 };   // 难=轻调、地狱=重调（易/中为 0，永不学）
+// 学习步长/钳制。注意：只自动调 keepW/playW（判据独立、干净）；
+// defenseW/selfW 揉在 netReplaceId 的同一个净威胁项里（defenseW*oppThreat + keepW*throwDesire，
+// 威胁项内部再叠 selfW），两者从同一信号学会耦合过拟合 → 只做只读败因归因（causes），不自动调。
 const LEARN_CLAMP = { keepW: [0, 3], playW: [0.2, 1.6] };
 const LEARN_MARGIN = 0.5;    // 一手要"明显更赚"（≥0.5 分）才算洞，避免噪声投票
 const LEARN_MAX_DEC = 120;   // 每局最多留多少个决策点（防内存膨胀）
@@ -192,6 +195,7 @@ let learned = {
   stats: { hard: { w: 0, l: 0 }, hell: { w: 0, l: 0 } },
   reviewed: 0,                                   // 已复盘（赢局）数
   holes: { play: 0, rep: 0, pen: 0 },            // 累计"引擎被你反超"处数
+  causes: { fed: 0, routed: 0 },                 // 补牌失误的只读归因：fed=资敌(喂对手凑14) routed=失后路(没留自己抓手)
   drift: 0,                                      // 累计调参次数
   log: [],                                       // 最近 5 条人类可读说明
 };
@@ -209,6 +213,7 @@ function loadLearn() {
     if (o.stats) learned.stats = o.stats;
     if (typeof o.reviewed === 'number') learned.reviewed = o.reviewed;
     if (o.holes) learned.holes = o.holes;
+    if (o.causes) learned.causes = o.causes;
     if (typeof o.drift === 'number') learned.drift = o.drift;
     if (Array.isArray(o.log)) learned.log = o.log.slice(-5);
   } catch (e) {}
@@ -284,6 +289,7 @@ function runLearn(ps, ns) {
   if (learningArmed() && won && decideLog.length) {
     const votes = { keepUp: 0, keepDown: 0, deadUp: 0, deadDown: 0 };
     const holes = { play: 0, rep: 0, pen: 0 };
+    let repFed = 0, repRouted = 0;   // 只读败因：补牌失误里"资敌" vs "失后路"（不自动调参，仅累计进 learned.causes）
     for (const d of decideLog) {
       try {
         if (d.k === 'play') {
@@ -293,6 +299,9 @@ function runLearn(ps, ns) {
           const eng = G.rankMoves(moves)[0];
           if (!mine || !eng) continue;
           // 两臂都用 null（都交给自动补牌）：只让"出哪一手"这一个变量不同，才是配对比较
+          // 同一手出牌：引擎用"最优补牌"的净分差 vs 玩家用"自己选的补牌"——
+          // 差异全在补牌这一步（selfW/defenseW/keepW 三个权重揉在 netReplaceId 里），
+          // 所以只记到 rep 洞（补牌失误），不拆出假的 self 洞（会过拟合）。
           if (G.evalMoveRollout(d.st, 'player', mine, null) > G.evalMoveRollout(d.st, 'player', eng, null) + LEARN_MARGIN) holes.play++;
         } else if (d.k === 'rep') {
           const moves = G.findMoves(d.st.playerHand, d.st.table);
@@ -308,6 +317,14 @@ function runLearn(ps, ns) {
               const k1 = G.keepValue(c1, d.st), k2 = G.keepValue(c2, d.st);
               if (k1 < k2) votes.keepUp++; else if (k1 > k2) votes.keepDown++;
             }
+            // 只读败因归因（不反向调参，只累计进 causes 给你看）：
+            // 玩家补的这张 vs 引擎最优补的那张，谁让"对手下一手可捞分"更高 = 资敌(feed)；
+            // 威胁侧差不多但玩家留的牌对自己下一手价值更低 = 失后路(routed)。
+            const stM = G.cloneState(d.st); G.capture(stM, 'player', mv); G.replaceAndRefill(stM, 'player', d.cardId);
+            const stE = G.cloneState(d.st); G.capture(stE, 'player', mv); G.replaceAndRefill(stE, 'player', engId);
+            const oppM = G.opponentBestGain(stM, 'player'), oppE = G.opponentBestGain(stE, 'player');
+            if (oppM - oppE >= LEARN_MARGIN) repFed++;          // 你补的牌喂对手更多
+            else repRouted++;                                    // 你补的牌没给自己留抓手
           }
         } else if (d.k === 'pen') {
           if (G.findMoves(d.st.playerHand, d.st.table).length) continue;   // 引擎这手会出牌 → 不是同一分支
@@ -327,6 +344,7 @@ function runLearn(ps, ns) {
     }
     learned.reviewed++;
     learned.holes.play += holes.play; learned.holes.rep += holes.rep; learned.holes.pen += holes.pen;
+    learned.causes.fed += repFed; learned.causes.routed += repRouted;
     const step = LEARN_STEP[sel] || 0;
     const w = Object.assign({}, G.DEFAULT_WEIGHTS, learned.weights || {});
     const parts = [];
@@ -386,7 +404,7 @@ function exportLearn() {
   const payload = {
     v: 1, note: '学习系统导出：weights 即"被玩家教过一轮"的权重，可直接写进 game-core.js 的 DEFAULT_WEIGHTS',
     weights: learned.weights, defaultWeights: G.DEFAULT_WEIGHTS, stats: learned.stats,
-    reviewed: learned.reviewed, holes: learned.holes, drift: learned.drift, log: learned.log,
+    reviewed: learned.reviewed, holes: learned.holes, causes: learned.causes, drift: learned.drift, log: learned.log,
   };
   const txt = JSON.stringify(payload, null, 2);
   const ta = $('learnOut');
@@ -403,7 +421,7 @@ function exportLearn() {
 function resetLearn() {
   learned = {
     v: 1, weights: null, stats: { hard: { w: 0, l: 0 }, hell: { w: 0, l: 0 } },
-    reviewed: 0, holes: { play: 0, rep: 0, pen: 0 }, drift: 0, log: [],
+    reviewed: 0, holes: { play: 0, rep: 0, pen: 0 }, causes: { fed: 0, routed: 0 }, drift: 0, log: [],
   };
   saveLearn();
   applyLearnWeights(npcDifficulty);

@@ -189,6 +189,11 @@ const LEARN_STEP = { hard: 0.03, hell: 0.06 };   // 难=轻调、地狱=重调�
 const LEARN_CLAMP = { keepW: [0, 3], playW: [0.2, 1.6] };
 const LEARN_MARGIN = 0.5;    // 一手要"明显更赚"（≥0.5 分）才算洞，避免噪声投票
 const LEARN_MAX_DEC = 120;   // 每局最多留多少个决策点（防内存膨胀）
+// 复盘教练（量"最优走法比你这步好多少"，与学习系统反方向；全难度都记，标尺=最强走法）
+const GAMES_KEY = 'h14_games_v1';
+const REVIEW_MARGIN = 0.5;   // 一步明显丢分(≥0.5)才记进复盘，过滤噪声
+const REVIEW_TOP = 15;      // 每局最多存几条最大丢分决策（控 JSON 体积）
+const GAMES_MAX = 60;       // localStorage 只留最近 N 局复盘
 let learned = {
   v: 1,
   weights: null,                                 // 学习后的权重；null = 还没学到东西（等于出厂默认）
@@ -201,6 +206,131 @@ let learned = {
 };
 let decideLog = [];       // 本局玩家决策快照（只在内存里，不落盘）
 let pendingPlay = null;   // 上一次出牌的决策快照（补牌轴要跟它配对）
+
+// ---------- 复盘教练记录（局后把"最大丢分点"存成紧凑 JSON；离线 tools-coach.js 聚合成弱点报告） ----------
+// 与学习系统反方向：学习量"玩家反超引擎"（为让 NPC 变强），教练量"最优走法比你这步好多少"（为告诉你丢分在哪）。
+// 逐点判定在浏览器端算好、只存结论（不存 state 克隆）→ JSON 小、可导出、可分享。
+let gameLog = [];         // 最近 GAMES_MAX 局的复盘记录
+function loadGames() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const raw = localStorage.getItem(GAMES_KEY);
+    if (!raw) return;
+    const a = JSON.parse(raw);
+    if (Array.isArray(a)) gameLog = a.slice(-GAMES_MAX);
+  } catch (e) {}
+}
+function saveGames() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(GAMES_KEY, JSON.stringify(gameLog));
+  } catch (e) {}
+}
+// 复盘本局（在 runLearn 之前调用——runLearn 结尾会清空 decideLog）。全难度都记，标尺=最强走法。
+function recordGame(ps, ns) {
+  if (!state || !G || !G.cloneState || !decideLog.length) return;
+  const misses = [];
+  for (const d of decideLog) {
+    try {
+      let mineV = null, engV = null, axis = null, cause = '';
+      if (d.k === 'play') {
+        const moves = G.findMoves(d.st.playerHand, d.st.table);
+        if (!moves.length) continue;
+        const mine = findMoveBy(moves, d.handIds, d.tableId);
+        const eng = G.rankMoves(moves)[0];
+        if (!mine || !eng) continue;
+        mineV = G.evalMoveRollout(d.st, 'player', mine, null);
+        engV = G.evalMoveRollout(d.st, 'player', eng, null);
+        axis = 'play';
+      } else if (d.k === 'rep') {
+        const moves = G.findMoves(d.st.playerHand, d.st.table);
+        const mv = findMoveBy(moves, d.handIds, d.tableId);
+        if (!mv) continue;
+        const engId = G.netReplaceId(d.st, 'player', mv);
+        if (!engId || engId === d.cardId) continue;
+        mineV = G.evalMoveRollout(d.st, 'player', mv, d.cardId);
+        engV = G.evalMoveRollout(d.st, 'player', mv, engId);
+        // 败因（只读）：玩家补的这张 vs 引擎最优补的这张，谁让对手下一手能捞更多 = 资敌(fed)
+        const stM = G.cloneState(d.st); G.capture(stM, 'player', mv); G.replaceAndRefill(stM, 'player', d.cardId);
+        const stE = G.cloneState(d.st); G.capture(stE, 'player', mv); G.replaceAndRefill(stE, 'player', engId);
+        const oppM = G.opponentBestGain(stM, 'player'), oppE = G.opponentBestGain(stE, 'player');
+        axis = 'replace';
+        cause = (oppM - oppE >= REVIEW_MARGIN) ? 'fed' : 'routed';
+      } else if (d.k === 'pen') {
+        if (G.findMoves(d.st.playerHand, d.st.table).length) continue;   // 引擎这手会出牌 → 不是罚牌分支
+        const eng = G.chooseAction(d.st, 'player', { difficulty: 'hell' });
+        if (!eng || eng.type !== 'penalty' || eng.cardId === d.cardId) continue;
+        mineV = penValue(d.st, d.cardId);
+        engV = penValue(d.st, eng.cardId);
+        axis = 'penalty';
+      }
+      if (mineV === null || engV === null) continue;
+      const gap = Math.round((engV - mineV) * 100) / 100;
+      if (gap >= REVIEW_MARGIN) {
+        misses.push({
+          axis, cause,
+          mine: Math.round(mineV * 100) / 100,
+          eng: Math.round(engV * 100) / 100,
+          gap,
+          handIds: d.handIds || null,
+          cardId: d.cardId || null,
+          tableId: d.tableId || null,
+        });
+      }
+    } catch (e) { /* 单个决策点出错不影响整局复盘 */ }
+  }
+  misses.sort((a, b) => b.gap - a.gap);
+  gameLog.push({
+    v: 1,
+    ts: new Date().toISOString(),
+    diff: npcDifficulty,
+    result: ps > ns ? 'win' : ns > ps ? 'loss' : 'draw',
+    ps: Math.round(ps * 100) / 100,
+    ns: Math.round(ns * 100) / 100,
+    reviewed: decideLog.length,
+    misses: misses.slice(0, REVIEW_TOP),
+  });
+  if (gameLog.length > GAMES_MAX) gameLog = gameLog.slice(-GAMES_MAX);
+  saveGames();
+}
+// 把本局 + 累计丢分渲染成人类可读文本（结算层展开区）
+function coachSummary() {
+  const g = gameLog[gameLog.length - 1];
+  if (!g) return '还没有复盘记录：打完整局后这里会显示。';
+  const axisName = { play: '出牌', replace: '补牌', penalty: '罚牌' };
+  const lines = ['本局（' + diffLabel(g.diff) + ' · ' + (g.result === 'win' ? '赢' : g.result === 'loss' ? '输' : '平') + ' ' + g.ps + ' : ' + g.ns + '）'];
+  if (!g.misses.length) lines.push('  没有明显丢分，跟最优走法基本一致 👍');
+  else {
+    lines.push('  最大丢分 ' + g.misses.length + ' 处（前 ' + g.misses.length + ' 条）：');
+    g.misses.slice(0, 3).forEach((m) => {
+      lines.push('  · ' + (axisName[m.axis] || m.axis) + '：最优比你这步高 ' + m.gap.toFixed(2) + ' 分' + (m.cause ? '（' + (m.cause === 'fed' ? '资敌' : '失后路') + '）' : ''));
+    });
+  }
+  // 累计弱点（最近所有局）
+  const cnt = { play: 0, replace: 0, penalty: 0 }; let fed = 0, routed = 0;
+  gameLog.forEach((gg) => gg.misses.forEach((m) => { if (cnt[m.axis] !== undefined) cnt[m.axis]++; if (m.cause === 'fed') fed++; else if (m.cause === 'routed') routed++; }));
+  const total = cnt.play + cnt.replace + cnt.penalty;
+  if (total) lines.push('累计（最近 ' + gameLog.length + ' 局）丢分：出牌 ' + cnt.play + ' · 补牌 ' + cnt.replace + ' · 罚牌 ' + cnt.penalty + (fed + routed ? '（补牌里 资敌 ' + fed + ' / 失后路 ' + routed + '）' : ''));
+  return lines.join('\n');
+}
+// 导出全部复盘记录 → 喂给 node tools-coach.js 离线聚合成弱点报告
+function exportGames() {
+  const payload = {
+    v: 1,
+    note: '欢乐十四分·复盘教练导出：每局的最大丢分决策。离线分析：node tools-coach.js 文件1.json 文件2.json …',
+    games: gameLog,
+  };
+  const txt = JSON.stringify(payload, null, 2);
+  const ta = $('gameOut');
+  if (ta && 'value' in ta) { ta.value = txt; if (ta.classList) ta.classList.add('show'); if (ta.select) ta.select(); }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      const p = navigator.clipboard.writeText(txt);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+  } catch (e) {}
+  return txt;
+}
 
 function loadLearn() {
   try {
@@ -248,19 +378,22 @@ function learnSnapshot() {
   return { base: d, learned: lt, applied: out, intensity: t };
 }
 function pushDecide(rec) { if (decideLog.length < LEARN_MAX_DEC) decideLog.push(rec); }
+// 记录决策点：全难度都记（教练复盘要在任何一局都能指出"哪几步丢分"）。
+// 只在内存里、每局封顶 LEARN_MAX_DEC、新局即清，成本可控。
+// 学习系统仍只吃"难/地狱 且 你赢"的局（那 gate 在 runLearn 里，这里不管）。
 function recordPlayDecision(move) {
-  if (!learningArmed() || !G.cloneState) return;
+  if (!G.cloneState) return;
   const rec = { k: 'play', st: G.cloneState(state), handIds: move.handCards.map((c) => c.id), tableId: move.tableCard.id };
   pushDecide(rec);
   pendingPlay = rec;
 }
 function recordReplaceDecision(cardId) {
-  if (!learningArmed() || !pendingPlay) return;
+  if (!pendingPlay) return;
   pushDecide({ k: 'rep', st: pendingPlay.st, handIds: pendingPlay.handIds, tableId: pendingPlay.tableId, cardId: cardId });
   pendingPlay = null;
 }
 function recordPenaltyDecision(cardId) {
-  if (!learningArmed() || !G.cloneState) return;
+  if (!G.cloneState) return;
   pushDecide({ k: 'pen', st: G.cloneState(state), cardId: cardId });
 }
 function findMoveBy(moves, handIds, tableId) {
@@ -1036,6 +1169,7 @@ function showOver() {
   const winner = ps > ns ? '🎉 你赢了！' : ns > ps ? '🤖 NPC 赢了' : '🤝 平局！';
   const line = A ? A.npcSay(ps < ns ? 'overWin' : ps > ns ? 'overLose' : 'overDraw') : null;
   setNpcMood(ps < ns ? 'greedy' : ps > ns ? 'sad' : 'shock');
+  recordGame(ps, ns);                    // 先复盘本局（runLearn 结尾会清空 decideLog）
   const learnNote = runLearn(ps, ns);   // 只学"你赢"的局；易/中不学
 
   const fmt = (arr) => arr.length ? arr.map((c) => c.label).join('、') : '（无）';
@@ -1050,6 +1184,10 @@ function showOver() {
     scoreSummary('你', state.playerLoot, state.playerPenalty, ps) +
     scoreSummary('NPC', state.npcLoot, state.npcPenalty, ns) +
     (learnNote ? '<div class="over-rate">' + learnNote + '</div>' : '') +
+    '<details class="coach-box"><summary>📋 教练复盘（你这局哪几步丢分）</summary>' +
+    '<pre class="coach-body">' + coachSummary().replace(/</g, '&lt;') + '</pre>' +
+    '<div class="coach-actions"><button id="overGameExport" class="go ghost">导出复盘记录</button></div>' +
+    '</details>' +
     '<details><summary>查看双方全部牌面</summary>' +
     '<div>你的战利品：' + fmt(state.playerLoot) + '</div>' +
     '<div>你的罚牌：' + fmt(state.playerPenalty) + '</div>' +
@@ -1403,6 +1541,7 @@ if (document.readyState === 'loading') {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadLearn();
+  loadGames();
   loadPersistDiff();
   loadAskDiff();
   loadCoach();
@@ -1416,6 +1555,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const nd = $('coachNudge'); if (nd && nd.addEventListener) nd.addEventListener('click', function () { setCoach(true); });
   const on = $('overNew'); if (on && on.addEventListener) on.addEventListener('click', restartSame);
   const och = $('overChallenge'); if (och && och.addEventListener) och.addEventListener('click', shareChallenge);
+  // 复盘导出按钮是 overBody 动态生成的 → 用事件委托绑在静态的 overBody 上
+  const ob = $('overBody');
+  if (ob && ob.addEventListener) ob.addEventListener('click', function (e) {
+    const t = e.target;
+    if (t && t.id === 'overGameExport') { exportGames(); toast('复盘记录已复制，存成 .json 喂给 node tools-coach.js', 'ok'); }
+  });
   const rc = $('restartCancel'); if (rc && rc.addEventListener) rc.addEventListener('click', closeRestartConfirm);
   const ro = $('restartOk'); if (ro && ro.addEventListener) ro.addEventListener('click', confirmRestart);
   const ds = $('diffSeg');

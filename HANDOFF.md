@@ -79,7 +79,7 @@ $N mini-test.js   # 小程序界面：223 项
 $N style-check.js # 两版色板对齐（ui/mini 各自也调）
 
 # 手机版构建产物真跑（Playwright，需 NODE_PATH 指向已装 playwright 的隔离目录）
-#   NODE_PATH=C:/Users/Gary/.workbuddy/binaries/node/workspace/node_modules node mobile-test.js
+#   NODE_PATH=<本机已装 Playwright 的 node_modules> node mobile-test.js
 $N mobile-test.js # 手机版：四档 / 学习系统 / 面板可开 / 整局真打 / 零报错
 
 # 真实浏览器验证（改 CSS/布局必跑，桩测试测不出布局问题）

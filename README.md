@@ -201,7 +201,7 @@ node style-check.js  # 两版配色/色板对齐
 ```
 ```bash
 # 手机版真跑测试（Playwright 无头浏览器，跑真实构建产物；需要已装 playwright 的隔离目录）
-NODE_PATH=C:/Users/Gary/.workbuddy/binaries/node/workspace/node_modules node mobile-test.js
+NODE_PATH=<本机已装 Playwright 的 node_modules> node mobile-test.js
 ```
 
 > 改动界面代码后务必跑对应测试：Electron/浏览器改 `electron/src/app.js`、`style.css` → `node ui-test.js`；小程序改 `pages/game/*` → `node mini-test.js`；**改 `game-core.js` / `advisor.js` / `sfx.js` 后必须先把根目录版本同步到两个前端目录，再跑全部三个测试**。

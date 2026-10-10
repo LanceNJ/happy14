@@ -337,6 +337,44 @@ html, body {
 .help-body b { color: #ffd43b; }
 .help-body i { color: #ffb3c6; font-style: normal; }
 
+/* ② 成就面板 + 结算"新达成"闪现 */
+.achv-count { font-size: 15px; font-weight: 600; color: #ffd43b; }
+.achv-body { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+.achv {
+  display: grid; grid-template-columns: 34px 1fr auto; grid-template-rows: auto auto;
+  gap: 2px 10px; align-items: center;
+  border: 1px solid #3d3d3d; border-radius: 10px; padding: 10px 12px; background: #262626;
+  opacity: .5;
+}
+.achv.got { opacity: 1; border-color: #d9b45a66; background: #2a2a20; }
+.achv-ic { grid-row: 1 / 3; font-size: 28px; }
+.achv-name { font-size: 15px; font-weight: 700; color: #f3f3ee; }
+.achv.got .achv-name { color: #ffe08a; }
+.achv-desc { grid-column: 2 / 4; font-size: 12px; color: #9aa09a; line-height: 1.3; }
+.achv-state { font-size: 12px; color: #7f947f; }
+.achv.got .achv-state { color: #69db7c; }
+/* 结算里"本局新达成"横条（只在新得时出现） */
+.over-achv {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  margin: 6px 0 4px; padding: 8px; border: 1.5px dashed #d9b45a; border-radius: 10px;
+  background: rgba(217, 180, 90, .12);
+}
+.over-achv .o-achv {
+  font-size: 14px; font-weight: 700; color: #ffe08a;
+  padding: 4px 10px; border-radius: 8px; background: rgba(217, 180, 90, .18);
+}
+.over-achv-label { font-size: 12px; color: #cbb98a; width: 100%; text-align: center; }
+
+/* ③ 观战模式（两个 NPC 自动打完一整局，供看四档差距） */
+#spectateBanner {
+  flex: 0 0 auto; text-align: center; padding: 5px 8px; margin: 2px 0;
+  border-radius: 10px; font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  background: rgba(159, 208, 255, .14); color: #9fd0ff; border: 1px solid rgba(159, 208, 255, .4);
+}
+#spectateBanner.hidden { display: none; }
+.spectate-ctrl { display: flex; gap: 8px; margin-top: 12px; }
+.spectate-ctrl .go { flex: 1; margin-top: 0; }
+
 /* NPC 亮牌浮层（主题墨绿半透明，轻量显示牌面 + 等式 + 得分） */
 .npc-show {
   position: fixed; inset: 0;
@@ -413,6 +451,13 @@ html, body {
   box-shadow: 0 4px 14px rgba(0, 0, 0, .4);
 }
 .ss-go:active { transform: scale(.97); }
+.ss-today {
+  width: 100%; margin-top: 10px; padding: 12px;
+  border: 1.5px solid rgba(217, 180, 90, .6); border-radius: 12px;
+  background: rgba(217, 180, 90, .12); color: #f0dfae;
+  font-size: 16px; font-weight: 700; letter-spacing: .06em;
+}
+.ss-today:active { transform: scale(.98); }
 .ss-help {
   margin-top: 12px; padding: 8px 14px;
   border: none; background: none;

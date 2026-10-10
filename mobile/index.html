@@ -39,6 +39,8 @@
           <span class="ss-card gold">14</span>
         </div>
         <button id="startGo" class="ss-go">开始游戏</button>
+        <button id="startToday" class="ss-today">📅 今日牌局</button>
+        <button id="startSpectate" class="ss-today">🎬 看 NPC 对打</button>
         <button id="startHelp" class="ss-help">玩法说明</button>
         <div class="ss-coach">
           <span>💡 智能提示（陪你出牌）</span>
@@ -59,11 +61,15 @@
       </div>
       <div class="acts">
         <button id="learnBtn" class="icon" aria-label="NPC 学习">🧠</button>
+        <button id="achvBtn" class="icon" aria-label="成就" title="🏆 成就">🏆</button>
         <button id="coachBtn" class="icon labeled" title="不会出牌？点我看推荐走法" aria-label="智能提示：不会出牌时点我">💡<span>提示</span></button>
         <button id="helpBtn" class="icon" aria-label="玩法">?</button>
         <button id="newGame" class="icon" aria-label="重开">↻</button>
       </div>
     </header>
+
+    <!-- ③ 观战横幅（观战模式开着时提示 + 快捷退出） -->
+    <div id="spectateBanner" class="hidden">🎬 观战中：<b id="spectatePair">贪心 vs 地狱</b>　<button id="spectateStop" class="go ghost" style="margin:0;padding:2px 10px;font-size:12px;">停止观战</button></div>
 
     <!-- 提示按钮引导气泡（不会出牌时点我，一次性） -->
     <div id="coachNudge" class="coach-nudge"></div>
@@ -189,6 +195,15 @@
           <p><b>残局与结算</b>：补牌堆抓完，手牌只减不增，直到双方都打不出、手牌耗尽。得分 = 战利品合计 − 罚牌合计，高者胜。</p>
         </div>
         <button id="helpClose" class="go">知道了</button>
+      </div>
+    </div>
+
+    <!-- ② 成就/称号（本地累计，展示 + 达成记录） -->
+    <div id="achvModal" class="modal hidden">
+      <div class="box">
+        <h2>🏆 成就 <span id="achvCount" class="achv-count"></span></h2>
+        <div id="achvBody" class="achv-body"></div>
+        <button id="achvClose" class="go">关 闭</button>
       </div>
     </div>
   </div>

@@ -745,6 +745,82 @@ function mulberry32(a) {
 let currentSeed = 0;          // 本局发牌种子（结算分享时带出去）
 let challenge = null;         // 从 URL 读到的挑战：{ s, d, score }
 let challengeUsed = false;    // 挑战种子只在进局第一局使用
+
+// ---------- ① 今日牌局：同一天 = 同一副牌（日期做种子的 FNV-1a），本地记同种子最佳 ----------
+let todayMode = false;         // 「今日牌局」持续开关：本会话内再开一局仍是同一副牌（按日期种子刷分）
+let isTodayGame = false;       // 当前这局是否今日牌局
+const TODAY_KEY = 'h14_todaybest_v1';
+let todayBest = {};           // { '2026-10-08': 12.5, ... } 本设备每个日期的最佳分
+function todaySeedStr() {
+  const d = new Date();
+  const p = (x) => (x < 10 ? '0' + x : '' + x);
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function todaySeed() {
+  const s = todaySeedStr();
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+function loadTodayBest() {
+  try { const raw = localStorage.getItem(TODAY_KEY); if (raw) todayBest = JSON.parse(raw) || {}; } catch (e) { todayBest = {}; }
+}
+function saveTodayBest() {
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(TODAY_KEY, JSON.stringify(todayBest)); } catch (e) {}
+}
+function todayBestLine() {
+  const b = todayBest[todaySeedStr()];
+  return b != null ? ' · 本机最佳 ' + b.toFixed(2) + ' 分' : '';
+}
+
+// ---------- ② 成就/称号：本局判定 + 本地累计（localStorage），结算闪现新得 ----------
+const ACHV_KEY = 'h14_achv_v1';
+const ACHV = {
+  dualKings: { icon: '🃏', name: '双王收集者', desc: '一局内把大王和小王都收进战利品' },
+  zeroPen:   { icon: '🧊', name: '零罚大师', desc: '整局没罚掉一张牌，还收进了战利品' },
+  hellKill:  { icon: '🔥', name: '地狱屠龙', desc: '赢下一局「地狱」难度' },
+  score15:   { icon: '💯', name: '15分俱乐部', desc: '一局收进 15 分以上的战利品' },
+};
+let achv = {};               // { id: true } 已达成
+function loadAchv() {
+  try { const raw = localStorage.getItem(ACHV_KEY); if (raw) achv = JSON.parse(raw) || {}; } catch (e) { achv = {}; }
+}
+function saveAchv() {
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(ACHV_KEY, JSON.stringify(achv)); } catch (e) {}
+}
+// 返回本局新得的成就 id 列表（副作用：写进 achv 并落盘）
+function earnAchievements(ps, ns) {
+  const got = [];
+  const jokers = state.playerLoot.filter((c) => c.isJoker);
+  const hasBig = jokers.some((c) => c.label === '大王');
+  const hasSmall = jokers.some((c) => c.label === '小王');
+  if (hasBig && hasSmall && !achv.dualKings) { achv.dualKings = true; got.push('dualKings'); }
+  if (state.playerPenalty.length === 0 && state.playerLoot.length > 0 && !achv.zeroPen) { achv.zeroPen = true; got.push('zeroPen'); }
+  if (npcDifficulty === 'hell' && ps > ns && !achv.hellKill) { achv.hellKill = true; got.push('hellKill'); }
+  if (ps >= 15 && !achv.score15) { achv.score15 = true; got.push('score15'); }
+  if (got.length) saveAchv();
+  return got;
+}
+function achvHtml() {
+  return Object.keys(ACHV).map((id) => {
+    const a = ACHV[id], on = !!achv[id];
+    return '<div class="achv' + (on ? ' got' : '') + '"><span class="achv-ic">' + a.icon + '</span>' +
+      '<span class="achv-name">' + a.name + '</span>' +
+      '<span class="achv-desc">' + a.desc + '</span>' +
+      '<span class="achv-state">' + (on ? '已达成' : '未达成') + '</span></div>';
+  }).join('');
+}
+function openAchv() {
+  const m = $('achvModal'); if (!m || !m.classList) return;
+  const body = $('achvBody'); if (body) body.innerHTML = achvHtml();
+  const got = Object.keys(ACHV).filter((id) => achv[id]).length;
+  const cnt = $('achvCount'); if (cnt) cnt.textContent = got + ' / ' + Object.keys(ACHV).length;
+  m.classList.remove('hidden');
+  snd('tap');
+}
+function closeAchv() {
+  const m = $('achvModal'); if (m && m.classList) m.classList.add('hidden');
+}
 (function parseChallenge() {
   try {
     const q = new URLSearchParams(location.search);
@@ -766,11 +842,12 @@ function newGame() {
   if (challenge && !challengeUsed) { npcDifficulty = challenge.d; }   // 挑战局：按链接指定的难度打
   applyLearnWeights(npcDifficulty);   // 易/中=出厂权重；难吃一半、地狱全量（只有这两档会学）
   decideLog = []; pendingPlay = null;
-  // 挑战种子只用一次：首局按链接发牌；之后再来一局换新种子（避免永远同一副牌）
+  // 种子优先级：挑战链接 > 今日牌局（按日期，同一天人人同副牌）> 随机
   const useChallenge = challenge && !challengeUsed;
   if (useChallenge) challengeUsed = true;
-  currentSeed = useChallenge ? challenge.s : ((Math.random() * 0xffffffff) >>> 0);
-  const rng = useChallenge ? mulberry32(challenge.s) : undefined;
+  isTodayGame = !useChallenge && todayMode;
+  currentSeed = useChallenge ? challenge.s : (isTodayGame ? todaySeed() : ((Math.random() * 0xffffffff) >>> 0));
+  const rng = useChallenge ? mulberry32(challenge.s) : (isTodayGame ? mulberry32(currentSeed) : undefined);
   state = G.createGame({ numDecks: 2, firstRandom: firstMoveRandom, rng: rng });
   episode++;
   ui.selHand = []; ui.selTable = null; ui.noMoves = false; ui.mergePlan = null; ui.penPlan = null;
@@ -786,6 +863,8 @@ function newGame() {
   if (useChallenge) {
     const cScore = isFinite(challenge.score) ? challenge.score.toFixed(2) : null;
     setMessage('⚔️ 朋友发来的同牌挑战！同一副牌' + (cScore ? '，他拿了 ' + cScore + ' 分' : '') + '，看你能拿多少。');
+  } else if (isTodayGame) {
+    setMessage('📅 今日牌局！同一天玩的人都是这副牌，试试把' + todaySeedStr() + '打到最高分。' + todayBestLine());
   }
   announceFirst();
   snd('deal'); snd('start');
@@ -804,9 +883,14 @@ function newGame() {
 }
 
 function beginTurn() {
-  if (G.isGameOver(state)) { showOver(); return; }
+  if (G.isGameOver(state)) {
+    if (spectating) { spectateOver(G.computeScore(state, 'player'), G.computeScore(state, 'npc')); }
+    else { showOver(); }
+    return;
+  }
   if (state.turn === 'player') {
     if (state.playerHand.length === 0) { state.turn = 'npc'; beginTurn(); return; }
+    if (spectating) { spectatePlayerTurn(); return; }   // 观战："你"那侧交给引擎按容易自动出
     playerTurnStart();
   } else {
     if (state.npcHand.length === 0) { state.turn = 'player'; beginTurn(); return; }
@@ -1052,6 +1136,90 @@ function hidePlayerShow() {
   if (el) el.innerHTML = '';
 }
 
+// ---------- ③ NPC 观战：两个 NPC 自动打完一整局（"你"那侧也交给引擎出，看四档差距） ----------
+// spectating=true 时：NPC 侧走现成 npcTurn（五拍演出照放），玩家侧走 spectatePlayerTurn（轻量 1 拍）。
+// 结算不进结算弹窗，不记学习/复盘/成就（那不是真人打的），toast 播报后自动开下一局；顶栏横幅可停。
+let spectating = false;
+let spectatePrevDiff = 'medium';   // 进观战前的难度（"停止观战"恢复）
+function startToday() {
+  const ss = $('startScreen');
+  if (ss && ss.classList) ss.classList.add('hidden');
+  todayMode = true;
+  spectating = false;
+  snd('tap');
+  requestNewGame();   // 走正常难度流程，但 todayMode 保证发的是"今日同副牌"
+}
+function startSpectate() {
+  const ss = $('startScreen');
+  if (ss && ss.classList) ss.classList.add('hidden');
+  spectatePrevDiff = npcDifficulty;
+  npcDifficulty = 'hell';           // NPC 侧坐"地狱"位（"容易 vs 地狱"直观看差距）
+  todayMode = false;
+  spectating = true;
+  const b = $('spectateBanner'); if (b && b.classList) b.classList.remove('hidden');
+  snd('tap');
+  newGame();
+}
+function stopSpectate() {
+  spectating = false;
+  todayMode = false;
+  npcDifficulty = spectatePrevDiff;
+  const b = $('spectateBanner'); if (b && b.classList) b.classList.add('hidden');
+  const ss = $('startScreen'); if (ss && ss.classList) ss.classList.remove('hidden');
+  requestNewGame();
+}
+function spectateOver(ps, ns) {
+  const verdict = ps > ns ? '贪心方赢了' : ns > ps ? '地狱方赢了' : '平手';
+  setMessage('🎬 观战一局终：容易 ' + ps.toFixed(2) + ' vs 地狱 ' + ns.toFixed(2) + '（' + verdict + '），自动继续…');
+  toast('🎬 ' + ps.toFixed(2) + ' vs ' + ns.toFixed(2) + '：' + verdict, 'npc');
+  const ep = episode;
+  after(2000, () => { if (ep !== episode || !spectating) return; newGame(); });
+}
+// 观战时"你"那侧：引擎按「容易」自动出，轻量演出（亮一下 → 入账 → 换边），五拍留给 NPC 侧
+function spectatePlayerTurn() {
+  ui.mode = 'idle'; ui.valid = false; ui.selHand = []; ui.selTable = null;
+  ui.mergePlan = null; ui.penPlan = null;
+  hideNpcShow(); hidePlayerShow();
+  setMessage('🎬 贪心方出牌…');
+  const ep = episode;
+  after(600, () => {
+    if (ep !== episode || !spectating) return;
+    const action = G.chooseAction(state, 'player', { difficulty: 'easy' });
+    if (action.type === 'match') {
+      const captured = action.move.captured;
+      const n = captured.length;
+      const sum = G.sumMatchValue(action.move.handCards) + action.move.tableCard.matchValue;
+      const gain = Math.round(G.sumScore(captured) * 100) / 100;
+      showPlayerShow(showCardsHtml(captured, sum, gain, n, captured.some((c) => c.isJoker), '贪心方凑成', 'happy', true));
+      snd('flip');
+      renderAll();
+      after(900, () => {
+        if (ep !== episode || !spectating) return;
+        hidePlayerShow();
+        G.capture(state, 'player', action.move);
+        const before = state.playerHand.map((c) => c.id);
+        G.replaceAndRefill(state, 'player', action.replaceCardId);
+        const r = refillInfo('player', before);
+        if (r.got > 0) { snd('draw'); pulseEl('pLoot', 'pulse'); }
+        toast('贪心方 收 ' + n + ' 张 · +' + gain + ' 分', 'npc');
+        setMessage('🎬 贪心方：' + eqText(captured) + ' = ' + sum + '，收走 ' + n + ' 张');
+        renderAll();
+        after(700, () => { if (ep !== episode || !spectating) return; state.turn = 'npc'; beginTurn(); });
+      });
+    } else {
+      const before = state.playerHand.map((c) => c.id);
+      G.penalty(state, 'player', action.cardId);
+      const r = refillInfo('player', before);
+      if (r.got > 0) { snd('draw'); pulseEl('pLoot', 'pulse'); }
+      showPlayerShow('<div class="npc-show-box me"><div class="npc-show-head">对手（容易档）凑不出</div><div class="npc-show-eq">罚牌 1 张（隐藏）</div></div>');
+      toast('贪心方 罚牌 1 张（隐藏）', 'npc');
+      setMessage('🎬 贪心方凑不出，罚牌 1 张（隐藏）');
+      renderAll();
+      after(900, () => { if (ep !== episode || !spectating) return; hidePlayerShow(); state.turn = 'npc'; beginTurn(); });
+    }
+  });
+}
+
 // ---------- NPC 回合（简化：指牌 → 亮牌浮层 → 入账） ----------
 function npcTurn() {
   ui.mode = 'idle'; ui.valid = false; ui.selHand = []; ui.selTable = null;
@@ -1169,6 +1337,15 @@ function showOver() {
   const winner = ps > ns ? '🎉 你赢了！' : ns > ps ? '🤖 NPC 赢了' : '🤝 平局！';
   const line = A ? A.npcSay(ps < ns ? 'overWin' : ps > ns ? 'overLose' : 'overDraw') : null;
   setNpcMood(ps < ns ? 'greedy' : ps > ns ? 'sad' : 'shock');
+  const newAchv = earnAchievements(ps, ns);          // ② 判定本局新达成（副作用已落盘）
+  // ① 今日牌局：记录本机同日期最佳分（仅当本局是今日牌局）
+  let todayLine = '';
+  if (isTodayGame) {
+    const key = todaySeedStr();
+    if (todayBest[key] == null || ps > todayBest[key]) { todayBest[key] = ps; todayLine = ' · 刷新本机最佳 ' + ps.toFixed(2) + ' 分'; }
+    else { todayLine = ' · 本机最佳 ' + todayBest[key].toFixed(2) + ' 分（本局 ' + ps.toFixed(2) + '）'; }
+    saveTodayBest();
+  }
   recordGame(ps, ns);                    // 先复盘本局（runLearn 结尾会清空 decideLog）
   const learnNote = runLearn(ps, ns);   // 只学"你赢"的局；易/中不学
 
@@ -1177,10 +1354,20 @@ function showOver() {
   hideNpcBubble();
   hidePlayerShow();
   $('overTitle').textContent = '本局结束';
+  const gotCount = Object.keys(ACHV).filter((id) => achv[id]).length;
+  const achvBar = newAchv.length ?
+    '<div class="over-achv"><span class="over-achv-label">🏆 本局新达成</span>' +
+    newAchv.map((id) => '<span class="o-achv">' + ACHV[id].icon + ' ' + ACHV[id].name + '</span>').join('') +
+    '</div>' :
+    '<div class="over-achv" style="border-style:solid;opacity:.6"><span class="over-achv-label">🏆 成就 ' + gotCount + ' / ' + Object.keys(ACHV).length + '</span>' +
+    Object.keys(ACHV).filter((id) => achv[id]).map((id) => '<span class="o-achv" style="opacity:.75">' + ACHV[id].icon + ' ' + ACHV[id].name + '</span>').join('') +
+    '</div>';
   $('overBody').innerHTML =
     '<div class="winner">' + winner + '</div>' +
     '<div class="over-score">你 <b>' + ps.toFixed(2) + '</b> ： <b>' + ns.toFixed(2) + '</b> NPC</div>' +
+    (isTodayGame ? '<div class="over-score" style="font-size:14px;color:#ffd43b">📅 今日牌局 ' + todaySeedStr() + todayLine + '</div>' : '') +
     (line ? '<div class="over-say">🤖 NPC：「' + line.text + '」</div>' : '') +
+    achvBar +
     scoreSummary('你', state.playerLoot, state.playerPenalty, ps) +
     scoreSummary('NPC', state.npcLoot, state.npcPenalty, ns) +
     (learnNote ? '<div class="over-rate">' + learnNote + '</div>' : '') +
@@ -1196,6 +1383,7 @@ function showOver() {
     '</details>';
   $('overModal').classList.remove('hidden');
   snd(ps > ns ? 'win' : ps < ns ? 'lose' : 'drawEnd');
+  if (newAchv.length) toast('🏆 新达成：' + newAchv.map((id) => ACHV[id].name).join('、'), 'ok');
 }
 
 // ---------- 结算分享：复制挑战链接（同一副牌 + 我的得分），发给朋友比一比 ----------
@@ -1545,6 +1733,8 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPersistDiff();
   loadAskDiff();
   loadCoach();
+  loadTodayBest();
+  loadAchv();
   updateCoachUI();
   const hb = $('helpBtn'); if (hb && hb.addEventListener) hb.addEventListener('click', showHelp);
   const hc = $('helpClose'); if (hc && hc.addEventListener) hc.addEventListener('click', hideHelp);
@@ -1583,6 +1773,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const an = $('askDiffNever'); if (an && an.addEventListener) an.addEventListener('change', () => setAskDiff(!an.checked));
   const sg = $('startGo'); if (sg && sg.addEventListener) sg.addEventListener('click', beginFromStart);
   const sh = $('startHelp'); if (sh && sh.addEventListener) sh.addEventListener('click', showHelp);
+  // ① ② ③ 新功能按钮
+  const st = $('startToday'); if (st && st.addEventListener) st.addEventListener('click', startToday);
+  const ss = $('startSpectate'); if (ss && ss.addEventListener) ss.addEventListener('click', startSpectate);
+  const sp = $('spectateStop'); if (sp && sp.addEventListener) sp.addEventListener('click', stopSpectate);
+  const ab = $('achvBtn'); if (ab && ab.addEventListener) ab.addEventListener('click', openAchv);
+  const ac = $('achvClose'); if (ac && ac.addEventListener) ac.addEventListener('click', closeAchv);
   if (document.addEventListener) document.addEventListener('click', () => { if (SFX && SFX.unlock) SFX.unlock(); }, { once: true });
   // 进场先给标题画面，不直接开局（原来这里是 requestNewGame()）
   enterStartScreen();

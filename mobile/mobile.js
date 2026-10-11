@@ -1384,6 +1384,39 @@ function showOver() {
   $('overModal').classList.remove('hidden');
   snd(ps > ns ? 'win' : ps < ns ? 'lose' : 'drawEnd');
   if (newAchv.length) toast('🏆 新达成：' + newAchv.map((id) => ACHV[id].name).join('、'), 'ok');
+  // 外观·撒花：你赢 → 大片庆祝；平了/输了但有新成就 → 小撒花（有"新东西"才撒）；观战不撒
+  if (!spectating) {
+    if (ps > ns) celebrate(90);
+    else if (newAchv.length) celebrate(36);
+  }
+}
+
+// ---------- 外观·撒花（纯 DOM 粒子，零依赖；胜利 / 新成就时触发） ----------
+function celebrate(count) {
+  const layer = $('confetti');
+  if (!layer || typeof document === 'undefined') return;
+  const colors = ['#ffd43b', '#69db7c', '#ff6b6b', '#4dabf7', '#ffa94d', '#e599f7'];
+  const n = count || 60;
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement('div');
+    const round = Math.random() < 0.4;
+    p.className = 'cf' + (round ? ' round' : '');
+    const w = 6 + Math.floor(Math.random() * 8);
+    const h = round ? w : (4 + Math.floor(Math.random() * 6));
+    p.style.width = w + 'px'; p.style.height = h + 'px';
+    p.style.left = Math.random() * 100 + 'vw';
+    p.style.background = colors[i % colors.length];
+    const dx = (Math.random() * 2 - 1) * 160;                    // 水平飘
+    p.style.setProperty('--dx', dx + 'px');
+    p.style.setProperty('--rot', (360 + Math.random() * 540) + 'deg');
+    p.style.animationDuration = (1.6 + Math.random() * 1.4) + 's'; // 落地时间错开
+    layer.appendChild(p);
+    const life = 1800 + Math.random() * 1400;
+    setTimeout(() => { if (p.parentNode) p.parentNode.removeChild(p); }, life + 400);
+  }
+  // 层短暂显示后清空（避免残留节点堆积）
+  layer.classList.remove('hidden');
+  setTimeout(() => { if (layer) layer.innerHTML = ''; }, 3600);
 }
 
 // ---------- 结算分享：复制挑战链接（同一副牌 + 我的得分），发给朋友比一比 ----------

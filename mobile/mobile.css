@@ -152,6 +152,8 @@ html, body {
 #controls .btn:active { transform: scale(.97); }
 
 /* 牌 */
+/* 3D 透视：桌面/手牌容器开 perspective，选中抬起时带一点翻盖感 */
+#tableArea .cards, #playerHand { perspective: 900px; }
 .card {
   position: relative;
   width: calc(var(--card-h) * 0.72);
@@ -162,6 +164,7 @@ html, body {
   box-shadow: 0 2px 4px rgba(0,0,0,.3);
   display: flex; align-items: center; justify-content: center;
   user-select: none; -webkit-user-select: none;
+  transform-style: preserve-3d;
   --card-h: clamp(74px, 19vmin, 104px);
 }
 .card.red { color: #d11; }
@@ -180,10 +183,18 @@ html, body {
 .card .center .s { font-size: calc(var(--card-h) * 0.30); }
 .card.joker .center .jr { font-size: calc(var(--card-h) * 0.26); white-space: nowrap; letter-spacing: -0.04em; }
 .card.back {
-  background: repeating-linear-gradient(45deg, #1d4e89, #1d4e89 6px, #2b6cb0 6px, #2b6cb0 12px);
-  border-color: #14305a;
+  /* 卡通牌背：深蓝渐变 + 白双线内框 + 四角小星，比纯条纹更像"实体牌" */
+  background: radial-gradient(circle at 30% 25%, #3f7fd0 0%, #1d4e89 72%);
+  border-color: #0e2a52;
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.85), inset 0 0 0 5px rgba(255,255,255,.22), 0 2px 4px rgba(0,0,0,.35);
+  overflow: hidden;
 }
-.card.back .back-emoji { font-size: calc(var(--card-h) * 0.55); color: #cfe2ff; }
+.card.back::before, .card.back::after {
+  content: '✦'; position: absolute; font-size: calc(var(--card-h) * 0.13); color: #9cc4ff; opacity: .85;
+}
+.card.back::before { top: 9%; left: 12%; }
+.card.back::after { bottom: 9%; right: 12%; }
+.card.back .back-emoji { font-size: calc(var(--card-h) * 0.38); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
 
 /* 选中 / 演出状态 */
 .card.selected { border-color: #ffd43b; box-shadow: 0 0 0 3px #ffd43b88, 0 2px 6px rgba(0,0,0,.4); transform: translateY(-6px); }
@@ -564,5 +575,54 @@ html, body {
 .coach-nudge.show { display: block; animation: nudgePop .28s ease; }
 .coach-nudge::after { content: ''; position: absolute; top: -7px; right: var(--nudge-arrow-right, 28px); border: 7px solid transparent; border-bottom-color: #ffe08a; border-top: 0; }
 @keyframes nudgePop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* ================================================================
+   外观升级包（纯 CSS/零依赖，不碰 game-core.js）
+   ① 卡牌 3D 翻面 ② 胜利/达成撒花 ③ 卡通细节（牌背已做、NPC 轻浮、结算弹跳） */
+
+/* ① 3D 翻面：亮牌浮层的卡带透视 + 一张张"翻开"，桌面新出的牌也带一点翻盖感 */
+.npc-show-cards { perspective: 700px; }
+.npc-show-cards .card { animation: cardFlip .42s ease-out backwards; }
+.npc-show-cards .card.revealed { transform-style: preserve-3d; }
+@keyframes cardFlip {
+  0%   { transform: rotateY(-96deg) translateY(4px); opacity: 0; }
+  60%  { opacity: 1; }
+  100% { transform: rotateY(0deg) translateY(0); opacity: 1; }
+}
+/* 桌面新出牌：原 pop 是纯上下，加一帧轻微翻盖（rotateX）让它像"立起来" */
+.card.in-table { animation: cardPop3d .42s ease-out backwards; }
+@keyframes cardPop3d {
+  0%   { opacity: 0; transform: translateY(10px) scale(.86) rotateX(52deg); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+/* ② 撒花层（#confetti）：覆盖全屏、不挡操作，碎片从顶部落下 */
+#confetti { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 900; }
+#confetti.hidden { display: none; }
+#confetti .cf {
+  position: absolute; top: -18px; left: 0; border-radius: 2px; will-change: transform;
+  animation-name: cfFall; animation-timing-function: linear; animation-fill-mode: forwards;
+  animation-duration: 2.4s;
+}
+#confetti .cf.round { border-radius: 50%; }
+@keyframes cfFall {
+  to { transform: translate(var(--dx, 0), 106vh) rotate(var(--rot, 540deg)); opacity: .85; }
+}
+
+/* ③ 卡通细节 */
+/* NPC 头像空闲轻浮（说话/表情切换时 innerHTML 变，但外层 div 的浮动不动） */
+#npcArea .avatar { animation: npcBob 2.6s ease-in-out infinite; }
+@keyframes npcBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+/* 结算弹窗弹跳入场（带轻微过冲，卡通感） */
+#overModal .box { animation: overPop .42s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes overPop { 0% { opacity: 0; transform: scale(.66) translateY(12px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+/* 成就面板 & 今日牌局按钮：一点按压回弹，手感更像"按钮" */
+#achvModal .box { animation: overPop .36s cubic-bezier(.34, 1.56, .64, 1); }
+
+/* 无障碍：尊重系统"减少动态效果"设置，全部关动画 */
+@media (prefers-reduced-motion: reduce) {
+  .card.in-table, .npc-show-cards .card, #npcArea .avatar, #overModal .box, #achvModal .box, #confetti .cf { animation: none !important; }
+}
 
 

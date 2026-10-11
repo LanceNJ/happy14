@@ -1,4 +1,4 @@
-// 临时探针：验三个新功能（今日定牌/成就/NPC观战）在真浏览器里真能跑。
+// 临时探针：验三个新功能（同牌比一比/成就/NPC观战）在真浏览器里真能跑。
 // 观战那条钩了 beginTurn/spectateOver 主循环，重点验它。稳定后可并入 mobile-test.js。
 const fs = require('fs');
 const path = require('path');
@@ -30,8 +30,8 @@ const ck = (n, got, want) => {
     ['helpModal', 'restartModal', 'overModal'].forEach((id) => { const e = document.getElementById(id); if (e) e.classList.add('hidden'); });
   });
 
-  console.log('\n== ① 今日定牌 ==');
-  ck('启动屏有「今日定牌」按钮', await page.locator('#startToday').count(), 1);
+  console.log('\n== ① 同牌比一比 ==');
+  ck('启动屏有「同牌比一比」按钮', await page.locator('#startToday').count(), 1);
   await native('startToday');
   await page.waitForTimeout(150);
   await closeOverlays();
@@ -46,9 +46,9 @@ const ck = (n, got, want) => {
   await page.waitForTimeout(250);
   await closeOverlays();
   const st1 = await page.evaluate(() => ({ today: isTodayGame, seed: currentSeed, expect: todaySeed(), phase: state ? state.phase : null, msg: document.getElementById('message').textContent }));
-  ck('当前局标记为今日定牌', st1.today, true);
+  ck('当前局标记为同牌比一比', st1.today, true);
   ck('种子 = 日期种子（同一天人人同副牌）', st1.seed, st1.expect);
-  // 注：今日定牌只是"用今天日期当种子"开普通局，开场白会被"轮到你出牌/…"立刻盖掉，
+  // 注：同牌比一比只是"用今天日期当种子"开普通局，开场白会被"轮到你出牌/…"立刻盖掉，
   // 不拿瞬时 message 断言；证到 phase=playing（确实在打）即可。
   ck('今日局已进入正常对局', st1.phase, 'playing');
   await page.evaluate(() => { todayMode = false; });

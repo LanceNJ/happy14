@@ -469,6 +469,10 @@ html, body {
   font-size: 16px; font-weight: 700; letter-spacing: .06em;
 }
 .ss-today:active { transform: scale(.98); }
+.ss-today-note {
+  text-align: center; margin-top: 5px; margin-bottom: 2px;
+  color: #b8a877; font-size: 12.5px; letter-spacing: .04em;
+}
 .ss-help {
   margin-top: 12px; padding: 8px 14px;
   border: none; background: none;
@@ -617,7 +621,7 @@ html, body {
 /* 结算弹窗弹跳入场（带轻微过冲，卡通感） */
 #overModal .box { animation: overPop .42s cubic-bezier(.34, 1.56, .64, 1); }
 @keyframes overPop { 0% { opacity: 0; transform: scale(.66) translateY(12px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
-/* 成就面板 & 今日定牌按钮：一点按压回弹，手感更像"按钮" */
+/* 成就面板 & 同牌比一比按钮：一点按压回弹，手感更像"按钮" */
 #achvModal .box { animation: overPop .36s cubic-bezier(.34, 1.56, .64, 1); }
 
 /* 无障碍：尊重系统"减少动态效果"设置，全部关动画 */

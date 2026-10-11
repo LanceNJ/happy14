@@ -746,9 +746,9 @@ let currentSeed = 0;          // 本局发牌种子（结算分享时带出去�
 let challenge = null;         // 从 URL 读到的挑战：{ s, d, score }
 let challengeUsed = false;    // 挑战种子只在进局第一局使用
 
-// ---------- ① 今日定牌：同一天 = 同一副牌（日期做种子的 FNV-1a），本地记同种子最佳 ----------
-let todayMode = false;         // 「今日定牌」持续开关：本会话内再开一局仍是同一副牌（按日期种子刷分）
-let isTodayGame = false;       // 当前这局是否今日定牌
+// ---------- ① 同牌比一比：同一天 = 同一副牌（日期做种子的 FNV-1a），本地记同种子最佳 ----------
+let todayMode = false;         // 「同牌比一比」持续开关：本会话内再开一局仍是同一副牌（按日期种子刷分）
+let isTodayGame = false;       // 当前这局是否同牌比一比
 const TODAY_KEY = 'h14_todaybest_v1';
 let todayBest = {};           // { '2026-10-08': 12.5, ... } 本设备每个日期的最佳分
 function todaySeedStr() {
@@ -842,7 +842,7 @@ function newGame() {
   if (challenge && !challengeUsed) { npcDifficulty = challenge.d; }   // 挑战局：按链接指定的难度打
   applyLearnWeights(npcDifficulty);   // 易/中=出厂权重；难吃一半、地狱全量（只有这两档会学）
   decideLog = []; pendingPlay = null;
-  // 种子优先级：挑战链接 > 今日定牌（按日期，同一天人人同副牌）> 随机
+  // 种子优先级：挑战链接 > 同牌比一比（按日期，同一天人人同副牌）> 随机
   const useChallenge = challenge && !challengeUsed;
   if (useChallenge) challengeUsed = true;
   isTodayGame = !useChallenge && todayMode;
@@ -864,7 +864,7 @@ function newGame() {
     const cScore = isFinite(challenge.score) ? challenge.score.toFixed(2) : null;
     setMessage('⚔️ 朋友发来的同牌挑战！同一副牌' + (cScore ? '，他拿了 ' + cScore + ' 分' : '') + '，看你能拿多少。');
   } else if (isTodayGame) {
-    setMessage('📅 今日定牌！同一天玩的人都是这副牌，试试把' + todaySeedStr() + '打到最高分。' + todayBestLine());
+    setMessage('📅 同牌比一比！同一天玩的人都是这副牌，试试把' + todaySeedStr() + '打到最高分。' + todayBestLine());
   }
   announceFirst();
   snd('deal'); snd('start');
@@ -1338,7 +1338,7 @@ function showOver() {
   const line = A ? A.npcSay(ps < ns ? 'overWin' : ps > ns ? 'overLose' : 'overDraw') : null;
   setNpcMood(ps < ns ? 'greedy' : ps > ns ? 'sad' : 'shock');
   const newAchv = earnAchievements(ps, ns);          // ② 判定本局新达成（副作用已落盘）
-  // ① 今日定牌：记录本机同日期最佳分（仅当本局是今日定牌）
+  // ① 同牌比一比：记录本机同日期最佳分（仅当本局是同牌比一比）
   let todayLine = '';
   if (isTodayGame) {
     const key = todaySeedStr();
@@ -1365,7 +1365,7 @@ function showOver() {
   $('overBody').innerHTML =
     '<div class="winner">' + winner + '</div>' +
     '<div class="over-score">你 <b>' + ps.toFixed(2) + '</b> ： <b>' + ns.toFixed(2) + '</b> NPC</div>' +
-    (isTodayGame ? '<div class="over-score" style="font-size:14px;color:#ffd43b">📅 今日定牌 ' + todaySeedStr() + todayLine + '</div>' : '') +
+    (isTodayGame ? '<div class="over-score" style="font-size:14px;color:#ffd43b">📅 同牌比一比 ' + todaySeedStr() + todayLine + '</div>' : '') +
     (line ? '<div class="over-say">🤖 NPC：「' + line.text + '」</div>' : '') +
     achvBar +
     scoreSummary('你', state.playerLoot, state.playerPenalty, ps) +

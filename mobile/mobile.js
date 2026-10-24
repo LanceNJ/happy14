@@ -116,7 +116,7 @@ function updateCoachNudge() {
   const show = !coachOn && !seen && state && state.turn === 'player' && state.phase === 'playing' && ui.mode === 'select';
   n.classList.toggle('show', show);
   if (show) {
-    n.textContent = '不会出牌？点我看推荐走法 →';
+    n.innerHTML = '<span class="cn-x" role="button" aria-label="不再提示">×</span>不会出牌？点我看推荐走法 →';
     const tb = $('topbar'), c = $('coachBtn');
     if (tb) n.style.top = (tb.getBoundingClientRect().height + 6) + 'px';
     if (c) {
@@ -2339,7 +2339,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const ng = $('newGame'); if (ng && ng.addEventListener) ng.addEventListener('click', onRestartClick);
   const ct = $('coachToggleStart'); if (ct && ct.addEventListener) ct.addEventListener('click', function () { setCoach(!coachOn); });
   const cbtn = $('coachBtn'); if (cbtn && cbtn.addEventListener) cbtn.addEventListener('click', function () { setCoach(!coachOn); });
-  const nd = $('coachNudge'); if (nd && nd.addEventListener) nd.addEventListener('click', function () { setCoach(true); });
+  const nd = $('coachNudge'); if (nd && nd.addEventListener) nd.addEventListener('click', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('cn-x')) {
+      try { if (typeof localStorage !== 'undefined') localStorage.setItem('h14_coach_nudge', '1'); } catch (err) {}
+      updateCoachNudge();
+      return;
+    }
+    setCoach(true);
+  });
   const on = $('overNew'); if (on && on.addEventListener) on.addEventListener('click', restartSame);
   const och = $('overChallenge'); if (och && och.addEventListener) och.addEventListener('click', shareChallenge);
   const osc = $('overShareCard'); if (osc && osc.addEventListener) osc.addEventListener('click', openShareCard);

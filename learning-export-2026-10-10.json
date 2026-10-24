@@ -1,0 +1,27 @@
+{
+  "v": 1,
+  "note": "学习系统导出：weights 即\"被玩家教过一轮\"的权重，可直接写进 game-core.js 的 DEFAULT_WEIGHTS",
+  "weights": {
+    "defenseW": 2,
+    "selfW": 2,
+    "keepW": 1,
+    "playW": 0.86
+  },
+  "defaultWeights": {
+    "defenseW": 2,
+    "selfW": 2,
+    "keepW": 1,
+    "playW": 0.8
+  },
+  "stats": {
+    "hard": { "w": 0, "l": 0 },
+    "hell": { "w": 1, "l": 0 }
+  },
+  "reviewed": 1,
+  "holes": { "play": 2, "rep": 3, "pen": 2 },
+  "causes": { "fed": 0, "routed": 3 },
+  "drift": 1,
+  "log": [
+    "2026-10-10 赢下地狱，调整：罚牌更先扔死牌"
+  ]
+}

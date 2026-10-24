@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #0a1d10;
+    font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+    color: #f3eede;
+    -webkit-font-smoothing: antialiased;
+  }
+  .poster {
+    width: 1080px;
+    margin: 0 auto;
+    padding: 64px 60px 72px;
+    background:
+      radial-gradient(140% 80% at 50% 0%, #1e5230 0%, #14361f 55%, #0a1d10 100%);
+  }
+  .hero { text-align: center; margin-bottom: 44px; }
+  .hero .logo { font-size: 72px; line-height: 1; }
+  .hero h1 { font-size: 56px; font-weight: 800; margin-top: 18px; letter-spacing: 2px; }
+  .hero .sub { font-size: 30px; color: #c9c2a6; margin-top: 14px; }
+
+  .url-card {
+    background: #f3eede;
+    color: #14361f;
+    border-radius: 22px;
+    padding: 34px 36px;
+    text-align: center;
+    margin-bottom: 40px;
+    box-shadow: 0 8px 0 rgba(0,0,0,.25);
+  }
+  .url-card .label { font-size: 28px; color: #5a6b4f; margin-bottom: 14px; }
+  .url-card .link {
+    font-size: 38px; font-weight: 800; line-height: 1.35;
+    word-break: break-all; letter-spacing: .5px;
+  }
+  .url-card .tip { font-size: 24px; color: #7a6f4a; margin-top: 16px; }
+
+  .step {
+    display: flex; align-items: flex-start; gap: 26px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 20px;
+    padding: 30px 32px;
+    margin-bottom: 22px;
+  }
+  .step .no {
+    flex: 0 0 76px; height: 76px; border-radius: 50%;
+    background: #e8c45a; color: #14361f;
+    font-size: 40px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step .body { flex: 1; }
+  .step .title { font-size: 36px; font-weight: 800; margin-bottom: 10px; }
+  .step .desc { font-size: 28px; line-height: 1.55; color: #e7e2cf; }
+  .step .desc b { color: #ffd86b; }
+  .warn {
+    background: rgba(232,90,60,.16);
+    border: 1px solid rgba(232,90,60,.5);
+    border-radius: 16px; padding: 18px 24px;
+    font-size: 26px; color: #ffc9b8; margin: -4px 0 22px;
+  }
+  .phone { display: flex; gap: 18px; margin-top: 14px; }
+  .phone .col {
+    flex: 1; background: rgba(0,0,0,.25);
+    border-radius: 14px; padding: 16px 18px; font-size: 25px; line-height: 1.5;
+  }
+  .phone .col b { color: #ffd86b; }
+
+  .features {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+    margin-bottom: 36px;
+  }
+  .feat {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 16px; padding: 22px 24px;
+  }
+  .feat .ico { font-size: 40px; }
+  .feat .t { font-size: 30px; font-weight: 800; margin: 8px 0 6px; }
+  .feat .d { font-size: 24px; color: #cfc9b4; line-height: 1.45; }
+
+  .footer {
+    text-align: center; font-size: 26px; color: #c9c2a6;
+    border-top: 1px solid rgba(255,255,255,.14);
+    padding-top: 28px; line-height: 1.6;
+  }
+  .footer b { color: #ffd86b; }
+</style>
+</head>
+<body>
+<div class="poster">
+  <div class="hero">
+    <div class="logo">🃏</div>
+    <h1>欢乐十四分 · 手机版</h1>
+    <div class="sub">安装说明 · 30 秒装到桌面</div>
+  </div>
+
+  <div class="url-card">
+    <div class="label">游戏地址（长按复制）</div>
+    <div class="link">https://h14-mobile-98661.app.workbuddy.host/</div>
+    <div class="tip">装好后桌面有图标，点开即玩</div>
+  </div>
+
+  <div class="step">
+    <div class="no">1</div>
+    <div class="body">
+      <div class="title">复制上面的链接</div>
+      <div class="desc">长按地址 → 复制。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="no">2</div>
+    <div class="body">
+      <div class="title">用手机浏览器打开</div>
+      <div class="desc">
+        iPhone 用 <b>Safari</b>，安卓用 <b>Chrome</b>，把链接粘贴到地址栏打开。
+      </div>
+      <div class="warn">⚠️ 别在微信里直接点开链接——微信内置浏览器装不了，还会缓存旧版。</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="no">3</div>
+    <div class="body">
+      <div class="title">装到手机桌面（像 App 一样）</div>
+      <div class="phone">
+        <div class="col"><b>iPhone</b><br/>Safari 底部「分享」按钮 → 选「添加到主屏幕」</div>
+        <div class="col"><b>安卓</b><br/>Chrome 右上角 ⋮ → 选「安装应用」</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="no">4</div>
+    <div class="body">
+      <div class="title">装好就能玩</div>
+      <div class="desc">点桌面图标全屏打开，断网也能玩（第一次需联网加载一次）。</div>
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="feat"><div class="ico">🔥</div><div class="t">连续天数</div><div class="d">今日最佳分 + 最近 30 天曲线，每天来一局</div></div>
+    <div class="feat"><div class="ico">⚙️</div><div class="t">设置</div><div class="d">关音效 / 震动 / 放大牌面 / 重看玩法</div></div>
+    <div class="feat"><div class="ico">🏆</div><div class="t">战报卡</div><div class="d">打完一局存图，直接发群里</div></div>
+    <div class="feat"><div class="ico">🎬</div><div class="t">回放本局</div><div class="d">看自己哪一手丢分最多</div></div>
+  </div>
+
+  <div class="footer">
+    同一天 · 同一副牌，比谁分高<br/>
+    <b>欢乐十四分</b> · 手机版 v1.3
+  </div>
+</div>
+</body>
+</html>

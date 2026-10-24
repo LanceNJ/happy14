@@ -4,8 +4,30 @@ const G = (typeof require !== 'undefined') ? require('./game-core.js') : window.
 const A = (typeof require !== 'undefined') ? require('./advisor.js') : (window.ADVISOR || null);
 const SFX = (typeof require !== 'undefined') ? require('./sfx.js') : (window.SFX || null);
 
-// 音效安全调用（手机上无 UI 开关，靠系统音量控制；音效默认开）
-const snd = (name) => { try { if (SFX && typeof SFX[name] === 'function') SFX[name](); } catch (e) {} };
+// ---------- 设置（音效 / 震动 / 大字） ----------
+const SET_MUTED = 'h14_muted';
+const SET_VIB = 'h14_vibrate';
+const SET_BIG = 'h14_big';
+let muted = false;
+let vibrateOn = true;
+let bigMode = false;
+function readSet(k, dflt) { try { const v = localStorage.getItem(k); return v == null ? dflt : v === '1'; } catch (e) { return dflt; } }
+function writeSet(k, v) { try { if (typeof localStorage !== 'undefined') localStorage.setItem(k, v ? '1' : '0'); } catch (e) {} }
+function applyBigMode() {
+  try { if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.toggle('big', bigMode); } catch (e) {}
+}
+function loadSettings() {
+  muted = readSet(SET_MUTED, false);
+  vibrateOn = readSet(SET_VIB, true);
+  bigMode = readSet(SET_BIG, false);
+  applyBigMode();
+}
+function buzz(pattern) {
+  try { if (vibrateOn && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+}
+
+// 音效安全调用（设置里可静音；默认开）
+const snd = (name) => { try { if (muted) return; if (SFX && typeof SFX[name] === 'function') SFX[name](); } catch (e) {} };
 
 // 节奏（毫秒），手机可稍快
 const T_NPC_THINK = 650;
@@ -207,6 +229,35 @@ let learned = {
 let decideLog = [];       // 本局玩家决策快照（只在内存里，不落盘）
 let pendingPlay = null;   // 上一次出牌的决策快照（补牌轴要跟它配对）
 
+// ---------- 复盘回放：种子 + 动作序列（只存动作，不存 state 克隆） ----------
+// 新局固定用 mulberry32(currentSeed) 发牌 → 同一个种子能重建完全相同的牌局；
+// 再把双方每一次收牌/补牌/罚牌按序记下来，就能逐步回放整局。
+const REPLAY_KEY = 'h14_replays_v1';
+const REPLAY_MAX = 8;
+let replayActions = [];
+let replayLog = [];
+let replayFrames = [];
+let replayStep = 0;
+// 卡牌 id 是内核全局自增的，重建牌局时 id 会变；回放按「花色+点数」认牌
+// （同一副牌里同名牌除了 id 完全相同，互换不影响任何结果）。大王/小王用 J14/J15。
+function ckey(c) { return c ? (c.isJoker ? 'J' + c.rank : c.suit + c.rank) : ''; }
+function logReplay(a) { if (replayActions.length < 240) replayActions.push(a); }
+function loadReplays() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const raw = localStorage.getItem(REPLAY_KEY);
+    if (!raw) return;
+    const a = JSON.parse(raw);
+    if (Array.isArray(a)) replayLog = a.slice(-REPLAY_MAX);
+  } catch (e) {}
+}
+function saveReplays() {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(REPLAY_KEY, JSON.stringify(replayLog.slice(-REPLAY_MAX)));
+  } catch (e) {}
+}
+
 // ---------- 复盘教练记录（局后把"最大丢分点"存成紧凑 JSON；离线 tools-coach.js 聚合成弱点报告） ----------
 // 与学习系统反方向：学习量"玩家反超引擎"（为让 NPC 变强），教练量"最优走法比你这步好多少"（为告诉你丢分在哪）。
 // 逐点判定在浏览器端算好、只存结论（不存 state 克隆）→ JSON 小、可导出、可分享。
@@ -230,7 +281,9 @@ function saveGames() {
 function recordGame(ps, ns) {
   if (!state || !G || !G.cloneState || !decideLog.length) return;
   const misses = [];
+  let di = -1;
   for (const d of decideLog) {
+    di++;
     try {
       let mineV = null, engV = null, axis = null, cause = '';
       if (d.k === 'play') {
@@ -272,6 +325,7 @@ function recordGame(ps, ns) {
           mine: Math.round(mineV * 100) / 100,
           eng: Math.round(engV * 100) / 100,
           gap,
+          dec: di,
           handIds: d.handIds || null,
           cardId: d.cardId || null,
           tableId: d.tableId || null,
@@ -293,6 +347,178 @@ function recordGame(ps, ns) {
   if (gameLog.length > GAMES_MAX) gameLog = gameLog.slice(-GAMES_MAX);
   saveGames();
 }
+
+// ---------- 复盘回放：种子 + 动作序列 → 逐步重建整局 ----------
+function saveReplayRecord(ps, ns, hasNewGame) {
+  if (!replayActions.length) return;
+  const g = hasNewGame ? gameLog[gameLog.length - 1] : null;
+  replayLog.push({
+    v: 1,
+    ts: new Date().toISOString(),
+    seed: currentSeed >>> 0,
+    diff: npcDifficulty,
+    firstRandom: !!firstMoveRandom,
+    actions: replayActions.slice(),
+    ps: Math.round(ps * 100) / 100,
+    ns: Math.round(ns * 100) / 100,
+    misses: (g && g.misses) ? g.misses : [],
+  });
+  if (replayLog.length > REPLAY_MAX) replayLog = replayLog.slice(-REPLAY_MAX);
+  saveReplays();
+}
+function replayFindTable(st, a) {
+  if (typeof a.ti === 'number' && st.table[a.ti] && ckey(st.table[a.ti]) === a.t) return st.table[a.ti];
+  return st.table.find((c) => c && ckey(c) === a.t) || null;
+}
+function applyReplayAction(st, a) {
+  const who = a.w === 'p' ? 'player' : 'npc';
+  const hk = a.w === 'p' ? 'playerHand' : 'npcHand';
+  try {
+    if (a.k === 'c') {
+      const used = new Set();
+      const hs = [];
+      for (const k of (a.h || [])) {
+        const c = st[hk].find((x) => !used.has(x.id) && ckey(x) === k);
+        if (!c) return false;
+        used.add(c.id); hs.push(c);
+      }
+      const t = replayFindTable(st, a);
+      if (!t || hs.length !== (a.h || []).length) return false;
+      G.capture(st, who, { handCards: hs, tableCard: t, captured: hs.concat([t]) });
+      return true;
+    }
+    if (a.k === 'r') {
+      const c = a.c ? st[hk].find((x) => ckey(x) === a.c) : null;
+      G.replaceAndRefill(st, who, c ? c.id : null);
+      return true;
+    }
+    if (a.k === 'x') {
+      const c = st[hk].find((x) => ckey(x) === a.c);
+      if (!c) return false;
+      G.penalty(st, who, c.id);
+      return true;
+    }
+  } catch (e) { return false; }
+  return false;
+}
+function replayDescribe(a, before) {
+  const who = a.w === 'p' ? '你' : 'NPC';
+  const hk = a.w === 'p' ? 'playerHand' : 'npcHand';
+  if (a.k === 'c') {
+    const hs = (a.h || []).map((k) => before[hk].find((c) => ckey(c) === k)).filter(Boolean);
+    const t = replayFindTable(before, a);
+    if (hs.length && t) {
+      const all = hs.concat([t]);
+      const gain = Math.round(G.sumScore(all) * 100) / 100;
+      return who + ' 收走 ' + eqText(all) + ' = ' + (G.sumMatchValue(hs) + t.matchValue) + '（+' + gain + ' 分）';
+    }
+    return who + ' 收牌';
+  }
+  if (a.k === 'r') {
+    const c = a.c ? before[hk].find((x) => ckey(x) === a.c) : null;
+    return who + ' 补 ' + (c ? cardName(c) : '一张') + ' 到桌面';
+  }
+  if (a.k === 'x') {
+    const c = before[hk].find((x) => ckey(x) === a.c);
+    return who + ' 罚掉 ' + (c ? cardName(c) : '一张') + '（隐藏）';
+  }
+  return who + ' 出牌';
+}
+function snapReplayState(st) {
+  return {
+    table: st.table.slice(),
+    hand: st.playerHand.slice(),
+    npcCount: st.npcHand.length,
+    lootP: st.playerLoot.length,
+    lootN: st.npcLoot.length,
+    penP: st.playerPenalty.length,
+    penN: st.npcPenalty.length,
+    ps: G.computeScore(st, 'player'),
+    ns: G.computeScore(st, 'npc'),
+  };
+}
+function makeReplayFrames(rec) {
+  const frames = [];
+  let st;
+  try {
+    st = G.createGame({ numDecks: 2, firstRandom: rec.firstRandom !== false, rng: mulberry32(rec.seed >>> 0) });
+  } catch (e) { return frames; }
+  const missByDec = {};
+  (rec.misses || []).forEach((m) => { if (typeof m.dec === 'number' && missByDec[m.dec] == null) missByDec[m.dec] = m; });
+  frames.push(Object.assign({ label: '开局：同一副牌，双方重新开始', miss: null }, snapReplayState(st)));
+  for (let i = 0; i < rec.actions.length; i++) {
+    const a = rec.actions[i];
+    const label = replayDescribe(a, st);
+    if (!applyReplayAction(st, a)) {
+      frames.push(Object.assign({ label: '回放到这里对不上了（可能是旧版本记录）', miss: null }, snapReplayState(st)));
+      break;
+    }
+    frames.push(Object.assign({ label: label, miss: (a.m >= 0 ? (missByDec[a.m] || null) : null) }, snapReplayState(st)));
+  }
+  return frames;
+}
+function renderReplay() {
+  const f = replayFrames[replayStep];
+  if (!f) return;
+  const idx = $('replayIdx');
+  if (idx) idx.textContent = replayStep + ' / ' + Math.max(0, replayFrames.length - 1);
+  const note = $('replayNote');
+  if (note) {
+    if (f.miss) {
+      const axis = { play: '出牌', replace: '补牌', penalty: '罚牌' }[f.miss.axis] || '出牌';
+      note.innerHTML = '<span class="rp-miss">⚠️ 这手比最优少 ' + f.miss.gap.toFixed(2) + ' 分（' + axis + '）</span>';
+    } else {
+      note.textContent = f.label || '';
+    }
+  }
+  const stage = $('replayStage');
+  if (!stage) return;
+  if (!f.table) { stage.innerHTML = '<div class="trend-empty">这局没有可用的回放数据</div>'; return; }
+  const tHtml = f.table.map((c) => c ? cardEl(c).outerHTML : '<div class="card card-gap"></div>').join('');
+  const hHtml = f.hand.map((c) => cardEl(c).outerHTML).join('');
+  stage.innerHTML =
+    '<div class="rp-scores">你 <b>' + f.ps.toFixed(2) + '</b><span>：</span><b>' + f.ns.toFixed(2) + '</b> NPC</div>' +
+    '<div class="rp-sec">桌面</div><div class="rp-cards">' + tHtml + '</div>' +
+    '<div class="rp-sec">你的手牌</div><div class="rp-cards">' + hHtml + '</div>' +
+    '<div class="rp-counts">战利品 ' + f.lootP + ' : ' + f.lootN + ' · 罚牌 ' + f.penP + ' : ' + f.penN + ' · NPC 手牌 ' + f.npcCount + ' 张</div>';
+}
+function openReplay() {
+  const rec = replayLog[replayLog.length - 1];
+  if (!rec || !rec.actions || !rec.actions.length) { toast('这局还没有可回放的动作', 'warn'); return; }
+  const frames = makeReplayFrames(rec);
+  if (!frames.length) { toast('回放数据不可用', 'warn'); return; }
+  replayFrames = frames;
+  replayStep = 0;
+  const jb = $('replayJump');
+  if (jb) jb.style.display = (rec.misses && rec.misses.length) ? 'block' : 'none';
+  const m = $('replayModal');
+  if (m && m.classList) m.classList.remove('hidden');
+  renderReplay();
+  snd('tap');
+}
+function closeReplay() {
+  const m = $('replayModal');
+  if (m && m.classList) m.classList.add('hidden');
+}
+function replayGo(delta) {
+  if (!replayFrames.length) return;
+  replayStep = Math.max(0, Math.min(replayFrames.length - 1, replayStep + delta));
+  renderReplay();
+  snd('tap');
+}
+function replayJumpMiss() {
+  if (!replayFrames.length) return;
+  let best = -1, bestGap = -1;
+  for (let i = 0; i < replayFrames.length; i++) {
+    const m = replayFrames[i].miss;
+    if (m && m.gap > bestGap) { bestGap = m.gap; best = i; }
+  }
+  if (best < 0) { toast('这局没有明显丢分，打得很稳', 'good'); return; }
+  replayStep = best;
+  renderReplay();
+  toast('已跳到最大丢分那一手', 'ok');
+}
+
 // 把本局 + 累计丢分渲染成人类可读文本（结算层展开区）
 function coachSummary() {
   const g = gameLog[gameLog.length - 1];
@@ -377,24 +603,31 @@ function learnSnapshot() {
   Object.keys(d).forEach((k) => { out[k] = Math.round((d[k] + (lt[k] - d[k]) * t) * 1000) / 1000; });
   return { base: d, learned: lt, applied: out, intensity: t };
 }
-function pushDecide(rec) { if (decideLog.length < LEARN_MAX_DEC) decideLog.push(rec); }
+function pushDecide(rec) {
+  if (decideLog.length >= LEARN_MAX_DEC) return -1;
+  decideLog.push(rec);
+  return decideLog.length - 1;
+}
 // 记录决策点：全难度都记（教练复盘要在任何一局都能指出"哪几步丢分"）。
 // 只在内存里、每局封顶 LEARN_MAX_DEC、新局即清，成本可控。
 // 学习系统仍只吃"难/地狱 且 你赢"的局（那 gate 在 runLearn 里，这里不管）。
+// 返回值 = 该决策在 decideLog 里的下标（回放定位用；没记上返回 -1）。
 function recordPlayDecision(move) {
-  if (!G.cloneState) return;
+  if (!G.cloneState) return -1;
   const rec = { k: 'play', st: G.cloneState(state), handIds: move.handCards.map((c) => c.id), tableId: move.tableCard.id };
-  pushDecide(rec);
+  const i = pushDecide(rec);
   pendingPlay = rec;
+  return i;
 }
 function recordReplaceDecision(cardId) {
-  if (!pendingPlay) return;
-  pushDecide({ k: 'rep', st: pendingPlay.st, handIds: pendingPlay.handIds, tableId: pendingPlay.tableId, cardId: cardId });
+  if (!pendingPlay) return -1;
+  const i = pushDecide({ k: 'rep', st: pendingPlay.st, handIds: pendingPlay.handIds, tableId: pendingPlay.tableId, cardId: cardId });
   pendingPlay = null;
+  return i;
 }
 function recordPenaltyDecision(cardId) {
-  if (!G.cloneState) return;
-  pushDecide({ k: 'pen', st: G.cloneState(state), cardId: cardId });
+  if (!G.cloneState) return -1;
+  return pushDecide({ k: 'pen', st: G.cloneState(state), cardId: cardId });
 }
 function findMoveBy(moves, handIds, tableId) {
   for (const mv of moves) {
@@ -772,6 +1005,95 @@ function todayBestLine() {
   const b = todayBest[todaySeedStr()];
   return b != null ? ' · 本机最佳 ' + b.toFixed(2) + ' 分' : '';
 }
+// 连续参与天数：今天打了就从今天往回数；今天还没打就从昨天往回数（当天没结束不算断）
+function dateKeyOffset(off) {
+  const d = new Date();
+  d.setDate(d.getDate() + off);
+  const p = (x) => (x < 10 ? '0' + x : '' + x);
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function todayStreak() {
+  let i = (todayBest[todaySeedStr()] != null) ? 0 : -1;
+  let n = 0;
+  while (todayBest[dateKeyOffset(i)] != null) { n++; i--; if (n > 3650) break; }
+  return n;
+}
+function trendEntries() {
+  return Object.keys(todayBest)
+    .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k) && typeof todayBest[k] === 'number')
+    .sort().slice(-30)
+    .map((k) => ({ d: k, s: todayBest[k] }));
+}
+function renderTodayStats() {
+  const el = $('todayStats');
+  if (!el) return;
+  const st = todayStreak();
+  const best = todayBest[todaySeedStr()];
+  const parts = [];
+  if (st > 0) parts.push('🔥 连续 ' + st + ' 天');
+  if (best != null) parts.push('今日最佳 ' + best.toFixed(2) + ' 分');
+  else parts.push('今天还没打');
+  el.innerHTML = '<span class="ss-today-txt">' + parts.join(' · ') + '</span><span class="ss-trend-go">战绩曲线 ›</span>';
+}
+function openTrend() {
+  const m = $('trendModal');
+  if (!m || !m.classList) return;
+  renderTrend();
+  m.classList.remove('hidden');
+  snd('tap');
+}
+function closeTrend() {
+  const m = $('trendModal');
+  if (m && m.classList) m.classList.add('hidden');
+}
+function renderTrend() {
+  const entries = trendEntries();
+  const sum = $('trendSummary');
+  const chart = $('trendChart');
+  const list = $('trendList');
+  if (sum) {
+    const st = todayStreak();
+    const best = entries.length ? Math.max.apply(null, entries.map((e) => e.s)) : null;
+    sum.innerHTML = '🔥 连续 <b>' + st + '</b> 天　·　历史最高 <b>' + (best == null ? '—' : best.toFixed(2)) + '</b> 分' +
+      '<br><span class="trend-sub">最近 ' + entries.length + ' 个同牌日（本机记录）</span>';
+  }
+  if (chart) {
+    if (entries.length < 2) {
+      chart.innerHTML = '<div class="trend-empty">再打几天就能看到曲线了</div>';
+    } else {
+      const W = 300, H = 118, P = 16;
+      const vals = entries.map((e) => e.s);
+      let min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+      if (min === max) { min -= 1; max += 1; }
+      const span = max - min;
+      const pts = entries.map((e, i) => {
+        const x = P + (W - 2 * P) * (i / (entries.length - 1));
+        const y = H - P - (H - 2 * P) * ((e.s - min) / span);
+        return [x, y];
+      });
+      const line = pts.map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+      const area = P + ',' + (H - P) + ' ' + line + ' ' + (W - P) + ',' + (H - P);
+      const dots = pts.map((p, i) => '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="' + (i === pts.length - 1 ? 4 : 2.4) + '" class="' + (i === pts.length - 1 ? 'trend-dot last' : 'trend-dot') + '"/>').join('');
+      chart.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="同牌分数曲线">' +
+        '<line x1="' + P + '" y1="' + (H - P) + '" x2="' + (W - P) + '" y2="' + (H - P) + '" class="trend-axis"/>' +
+        '<polygon points="' + area + '" class="trend-area"/>' +
+        '<polyline points="' + line + '" class="trend-line"/>' + dots +
+        '<text x="' + P + '" y="12" class="trend-txt">' + max.toFixed(1) + '</text>' +
+        '<text x="' + P + '" y="' + (H - 3) + '" class="trend-txt">' + min.toFixed(1) + '</text>' +
+        '</svg>';
+    }
+  }
+  if (list) {
+    if (!entries.length) {
+      list.innerHTML = '<div class="trend-empty">还没有同牌记录。今天开一局，明天就有对比了。</div>';
+    } else {
+      list.innerHTML = entries.slice(-10).reverse().map((e) => {
+        const b = todayBest[e.d];
+        return '<div class="trend-row"><span>' + e.d.slice(5) + '</span><b>' + (b == null ? '—' : b.toFixed(2)) + '</b><span class="trend-unit">分</span></div>';
+      }).join('');
+    }
+  }
+}
 
 // ---------- ② 成就/称号：本局判定 + 本地累计（localStorage），结算闪现新得 ----------
 const ACHV_KEY = 'h14_achv_v1';
@@ -821,6 +1143,60 @@ function openAchv() {
 function closeAchv() {
   const m = $('achvModal'); if (m && m.classList) m.classList.add('hidden');
 }
+
+// ---------- 设置面板（音效 / 震动 / 大字 / 重看玩法 / 装到桌面） ----------
+let deferredInstall = null;
+function setToggle(id, on) {
+  const b = $(id);
+  if (!b) return;
+  b.textContent = on ? '开' : '关';
+  if (b.classList) b.classList.toggle('on', !!on);
+}
+function updateSetUI() {
+  setToggle('setSound', !muted);
+  setToggle('setVibrate', vibrateOn);
+  setToggle('setBig', bigMode);
+  const ib = $('setInstall');
+  if (ib) ib.style.display = deferredInstall ? 'block' : 'none';
+}
+function openSet() {
+  const m = $('setModal');
+  if (!m || !m.classList) return;
+  updateSetUI();
+  m.classList.remove('hidden');
+  snd('tap');
+}
+function closeSet() {
+  const m = $('setModal');
+  if (m && m.classList) m.classList.add('hidden');
+}
+function toggleSound() {
+  muted = !muted;
+  writeSet(SET_MUTED, muted);
+  if (!muted) snd('tap');
+  updateSetUI();
+}
+function toggleVibrate() {
+  vibrateOn = !vibrateOn;
+  writeSet(SET_VIB, vibrateOn);
+  if (vibrateOn) buzz([12, 30, 12]);
+  updateSetUI();
+}
+function toggleBig() {
+  bigMode = !bigMode;
+  writeSet(SET_BIG, bigMode);
+  applyBigMode();
+  snd('tap');
+  updateSetUI();
+}
+function promptInstall() {
+  if (!deferredInstall) return;
+  try {
+    deferredInstall.prompt();
+    deferredInstall = null;
+    updateSetUI();
+  } catch (e) {}
+}
 (function parseChallenge() {
   try {
     const q = new URLSearchParams(location.search);
@@ -842,12 +1218,14 @@ function newGame() {
   if (challenge && !challengeUsed) { npcDifficulty = challenge.d; }   // 挑战局：按链接指定的难度打
   applyLearnWeights(npcDifficulty);   // 易/中=出厂权重；难吃一半、地狱全量（只有这两档会学）
   decideLog = []; pendingPlay = null;
+  replayActions = [];
   // 种子优先级：挑战链接 > 同牌比一比（按日期，同一天人人同副牌）> 随机
   const useChallenge = challenge && !challengeUsed;
   if (useChallenge) challengeUsed = true;
   isTodayGame = !useChallenge && todayMode;
   currentSeed = useChallenge ? challenge.s : (isTodayGame ? todaySeed() : ((Math.random() * 0xffffffff) >>> 0));
-  const rng = useChallenge ? mulberry32(challenge.s) : (isTodayGame ? mulberry32(currentSeed) : undefined);
+  // 一律走种子发牌：普通局也记下种子，回放才能重建同一副牌
+  const rng = mulberry32(currentSeed >>> 0);
   state = G.createGame({ numDecks: 2, firstRandom: firstMoveRandom, rng: rng });
   episode++;
   ui.selHand = []; ui.selTable = null; ui.noMoves = false; ui.mergePlan = null; ui.penPlan = null;
@@ -930,7 +1308,8 @@ function onHandClick(card) {
         toast('💡 换个思路：补「' + cardName(alt.card) + '」比你现在这张更稳——它' + riskTxt(alt) + '、' + keepTxt(alt) + '；你选的这张' + riskTxt(mine) + '、' + keepTxt(mine), 'warn');
       }
     }
-    recordReplaceDecision(card.id);
+    const decIdx = recordReplaceDecision(card.id);
+    logReplay({ w: 'p', k: 'r', c: ckey(card), m: decIdx });
     const before = state.playerHand.map((c) => c.id);
     G.replaceAndRefill(state, 'player', card.id);
     const r = refillInfo('player', before);
@@ -1016,11 +1395,13 @@ function confirmMatch() {
 
 function finishPlayerMerge(move, gain) {
   hidePlayerShow();   // 收牌时收掉玩家亮牌浮层
-  recordPlayDecision(move);
+  const decIdx = recordPlayDecision(move);
+  logReplay({ w: 'p', k: 'c', h: move.handCards.map(ckey), t: ckey(move.tableCard), ti: state.table.findIndex((c) => c && c.id === move.tableCard.id), m: decIdx });
   G.capture(state, 'player', move);
   ui.selHand = []; ui.selTable = null; ui.valid = false;
   const gotJoker = move.captured.some((c) => c.isJoker);
   snd(gotJoker ? 'joker' : 'match');
+  buzz(gotJoker ? [10, 30, 10, 30, 10] : 14);
   setMessage('✅ 合牌完成，你收获 ' + move.captured.length + ' 张 · +' + gain + ' 分。');
   toast('收获 ' + move.captured.length + ' 张 · +' + gain + ' 分', 'good');
   pulseEl('pLoot', 'pulse');
@@ -1029,6 +1410,7 @@ function finishPlayerMerge(move, gain) {
   else if (gain >= 1.5) npcSay('playerBigLoot', 0.6);
   if (state.playerHand.length === 0) {
     const before = [];
+    logReplay({ w: 'p', k: 'r', c: null, m: -1 });
     G.replaceAndRefill(state, 'player', null);
     const r = refillInfo('player', before);
     setMessage('✅ 匹配成功！手牌已空，自动从补牌堆补 1 张到桌面。');
@@ -1062,7 +1444,8 @@ function doPenalty() {
   setTimeout(() => {
     if (ep !== episode) return;
     ui.penPlan = null;
-    recordPenaltyDecision(card.id);
+    const decIdx = recordPenaltyDecision(card.id);
+    logReplay({ w: 'p', k: 'x', c: ckey(card), m: decIdx });
     const before = state.playerHand.map((c) => c.id);
     G.penalty(state, 'player', card.id);
     const r = refillInfo('player', before);
@@ -1271,9 +1654,12 @@ function npcTurn() {
 
             after(T_NPC_MERGE, () => {
               if (!ui.mergePlan) return;
+              logReplay({ w: 'n', k: 'c', h: action.move.handCards.map(ckey), t: ckey(action.move.tableCard), ti: state.table.findIndex((c) => c && c.id === action.move.tableCard.id), m: -1 });
+              const repCard = state.npcHand.find((c) => c.id === action.replaceCardId);
               G.capture(state, 'npc', action.move);
               const before = state.npcHand.map((c) => c.id);
               G.replaceAndRefill(state, 'npc', action.replaceCardId);
+              logReplay({ w: 'n', k: 'r', c: repCard ? ckey(repCard) : null, m: -1 });
               const r = refillInfo('npc', before);
               if (r.got > 0) { snd('draw'); pulseEl('nLoot', 'pulse'); }
               toast('NPC 收获 ' + n + ' 张 · +' + gain + ' 分', 'npc');
@@ -1301,6 +1687,7 @@ function npcTurn() {
       toast('NPC 罚牌 1 张（隐藏）', 'npc');
       after(1300, () => {
         const before = state.npcHand.map((c) => c.id);
+        logReplay({ w: 'n', k: 'x', c: ckey(state.npcHand.find((c) => c.id === action.cardId)), m: -1 });
         G.penalty(state, 'npc', action.cardId);
         const r = refillInfo('npc', before);
         if (r.got > 0) { snd('draw'); pulseEl('nLoot', 'pulse'); }
@@ -1346,8 +1733,11 @@ function showOver() {
     else { todayLine = ' · 本机最佳 ' + todayBest[key].toFixed(2) + ' 分（本局 ' + ps.toFixed(2) + '）'; }
     saveTodayBest();
   }
+  const gameCountBefore = gameLog.length;
   recordGame(ps, ns);                    // 先复盘本局（runLearn 结尾会清空 decideLog）
+  saveReplayRecord(ps, ns, gameLog.length > gameCountBefore);   // 存种子 + 动作序列（回放用）
   const learnNote = runLearn(ps, ns);   // 只学"你赢"的局；易/中不学
+  renderTodayStats();
 
   const fmt = (arr) => arr.length ? arr.map((c) => c.label).join('、') : '（无）';
 
@@ -1381,8 +1771,11 @@ function showOver() {
     '<div>NPC 战利品：' + fmt(state.npcLoot) + '</div>' +
     '<div>NPC 罚牌：' + fmt(state.npcPenalty) + '</div>' +
     '</details>';
+  const rb = $('overReplay');
+  if (rb) rb.style.display = replayActions.length ? 'block' : 'none';
   $('overModal').classList.remove('hidden');
   snd(ps > ns ? 'win' : ps < ns ? 'lose' : 'drawEnd');
+  if (ps > ns) buzz([12, 40, 12, 40, 24]);
   if (newAchv.length) toast('🏆 新达成：' + newAchv.map((id) => ACHV[id].name).join('、'), 'ok');
   // 外观·撒花：你赢 → 大片庆祝；平了/输了但有新成就 → 小撒花（有"新东西"才撒）；观战不撒
   if (!spectating) {
@@ -1443,6 +1836,147 @@ function fallbackCopy(text, done) {
   document.body.appendChild(ta); ta.select();
   try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请手动复制链接'); }
   if (document.body.removeChild) document.body.removeChild(ta);
+}
+
+// ---------- 战报卡：canvas 画一张 1080×1350 的图，长按/下载即可发群 ----------
+let shareCardData = '';
+function rrPath(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+function shareKeyLine() {
+  const g = gameLog[gameLog.length - 1];
+  if (g && g.misses && g.misses.length) {
+    const axis = { play: '出牌', replace: '补牌', penalty: '罚牌' }[g.misses[0].axis] || '出牌';
+    return '最大丢分：' + axis + ' ' + g.misses[0].gap.toFixed(2) + ' 分';
+  }
+  return '全程接近最优，没有明显丢分';
+}
+function drawShareCard(ps, ns) {
+  const W = 1080, H = 1350;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+  if (!x) throw new Error('no canvas');
+
+  const bg = x.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#1e5230'); bg.addColorStop(0.6, '#14361f'); bg.addColorStop(1, '#081a0e');
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+
+  x.save();
+  x.globalAlpha = 0.055; x.fillStyle = '#ffffff';
+  x.font = 'bold 300px Georgia, "Times New Roman", serif'; x.textAlign = 'left';
+  x.fillText('♠', 16, 330); x.fillText('♥', 748, 360); x.fillText('♣', 22, 1120); x.fillText('♦', 740, 1150);
+  x.restore();
+
+  x.strokeStyle = '#d9b45a'; x.lineWidth = 6;
+  rrPath(x, 36, 36, W - 72, H - 72, 28); x.stroke();
+  x.strokeStyle = 'rgba(217,180,90,.32)'; x.lineWidth = 2;
+  rrPath(x, 56, 56, W - 112, H - 112, 18); x.stroke();
+
+  x.textAlign = 'center';
+  x.fillStyle = '#f6efdc';
+  x.font = 'bold 74px "Microsoft YaHei","PingFang SC",sans-serif';
+  x.fillText('欢乐十四分', W / 2, 158);
+
+  x.fillStyle = '#c9c2a6';
+  x.font = '30px "Microsoft YaHei","PingFang SC",sans-serif';
+  const mode = isTodayGame ? '同牌比一比' : (challenge ? '同牌挑战' : '随机局');
+  x.fillText(todaySeedStr() + ' · ' + mode, W / 2, 210);
+
+  x.fillStyle = '#c9c2a6';
+  x.font = 'bold 82px Georgia,"Times New Roman",serif';
+  x.fillText(':', W / 2, 418);
+  x.fillStyle = '#ffe08a';
+  x.font = 'bold 158px Georgia,"Times New Roman",serif';
+  x.fillText(ps.toFixed(2), W * 0.27, 428);
+  x.fillStyle = '#9fd0ff';
+  x.fillText(ns.toFixed(2), W * 0.73, 428);
+  x.fillStyle = '#f3f3ee';
+  x.font = 'bold 40px "Microsoft YaHei","PingFang SC",sans-serif';
+  x.fillText('你', W * 0.27, 492);
+  x.fillText('NPC', W * 0.73, 492);
+
+  const win = ps > ns, draw = ps === ns;
+  x.fillStyle = win ? '#ffd43b' : (draw ? '#f3f3ee' : '#9fd0ff');
+  x.font = 'bold 62px "Microsoft YaHei","PingFang SC",sans-serif';
+  x.fillText(win ? '你赢了' : (draw ? '平局' : 'NPC 赢了'), W / 2, 598);
+
+  x.fillStyle = 'rgba(0,0,0,.26)';
+  rrPath(x, 104, 650, W - 208, 156, 22); x.fill();
+  x.strokeStyle = 'rgba(217,180,90,.35)'; x.lineWidth = 2;
+  rrPath(x, 104, 650, W - 208, 156, 22); x.stroke();
+  x.fillStyle = '#e8efe8';
+  x.font = '34px "Microsoft YaHei","PingFang SC",sans-serif';
+  x.fillText(shareKeyLine(), W / 2, 712);
+  x.fillStyle = '#c9c2a6';
+  x.font = '28px "Microsoft YaHei","PingFang SC",sans-serif';
+  x.fillText('难度：' + diffLabel(npcDifficulty) + '　·　同一副牌可复现', W / 2, 766);
+
+  const st = todayStreak();
+  if (st > 0) {
+    x.fillStyle = '#ffd43b';
+    x.font = 'bold 34px "Microsoft YaHei","PingFang SC",sans-serif';
+    x.fillText('🔥 同牌连续 ' + st + ' 天', W / 2, 880);
+  }
+
+  x.fillStyle = '#d9b45a';
+  x.font = 'bold 48px "Microsoft YaHei","PingFang SC",sans-serif';
+  x.fillText('同一副牌，来比比', W / 2, 1082);
+  x.fillStyle = '#f3f3ee';
+  x.font = '34px ui-monospace, Menlo, Consolas, monospace';
+  x.fillText('h14-mobile-98661.app.workbuddy.host', W / 2, 1146);
+  x.fillStyle = '#9fb89f';
+  x.font = '28px "Microsoft YaHei","PingFang SC",sans-serif';
+  x.fillText('点开 → 同牌比一比 → 今天这副牌', W / 2, 1200);
+
+  return cv.toDataURL('image/png');
+}
+function openShareCard() {
+  if (!state) return;
+  const ps = G.computeScore(state, 'player');
+  const ns = G.computeScore(state, 'npc');
+  try { shareCardData = drawShareCard(ps, ns); }
+  catch (e) { toast('战报卡生成失败，可直接用挑战链接', 'warn'); return; }
+  const box = $('shareCardPreview');
+  if (box) box.innerHTML = '<img src="' + shareCardData + '" alt="本局战报卡">';
+  const m = $('shareCardModal');
+  if (m && m.classList) m.classList.remove('hidden');
+  snd('tap');
+}
+function closeShareCard() {
+  const m = $('shareCardModal');
+  if (m && m.classList) m.classList.add('hidden');
+}
+function saveShareCard() {
+  if (!shareCardData) return;
+  try {
+    const a = document.createElement('a');
+    a.href = shareCardData;
+    a.download = '欢乐十四分-战报-' + todaySeedStr() + '.png';
+    document.body.appendChild(a);
+    a.click();
+    if (a.parentNode) a.parentNode.removeChild(a);
+    toast('已保存（没反应就长按图片保存）', 'ok');
+  } catch (e) { toast('保存失败，请长按图片保存', 'warn'); }
+}
+function copyShareText() {
+  if (!state) return;
+  const ps = G.computeScore(state, 'player');
+  const ns = G.computeScore(state, 'npc');
+  const verdict = ps > ns ? '赢了 NPC' : ps < ns ? '输给了 NPC' : '和 NPC 战平';
+  const text = '⚔️ 欢乐十四分：' + todaySeedStr() + ' 同牌局，我 ' + ps.toFixed(2) + ' 分（' + verdict +
+    '）。' + shareKeyLine() + ' 同一副牌，来比比 👉 ' + buildChallengeLink();
+  const done = () => toast('文案已复制', 'ok');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else { fallbackCopy(text, done); }
 }
 
 // ---------- 渲染 ----------
@@ -1670,6 +2204,7 @@ function maybeFirstHelp() {
 function enterStartScreen() {
   const ss = $('startScreen');
   if (!ss || !ss.classList) { requestNewGame(); return; }   // 兜底：没有标题页就直接开局
+  renderTodayStats();
   ss.classList.remove('hidden');
 }
 function beginFromStart() {
@@ -1760,15 +2295,44 @@ if (document.readyState === 'loading') {
   initVisitStat();
 }
 
+// ---------- PWA：装到桌面 + 离线可开（file:// 不注册，失败静默） ----------
+(function initPWA() {
+  try {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredInstall = e;
+        const b = document.getElementById('setInstall');
+        if (b) b.style.display = 'block';
+      });
+    }
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      window.addEventListener('load', function () {
+        try { navigator.serviceWorker.register('sw.js').catch(function () {}); } catch (e) {}
+      });
+    }
+  } catch (e) {}
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
   loadLearn();
   loadGames();
+  loadReplays();
+  loadSettings();
   loadPersistDiff();
   loadAskDiff();
   loadCoach();
   loadTodayBest();
   loadAchv();
   updateCoachUI();
+  renderTodayStats();
+  const sb = $('setBtn'); if (sb && sb.addEventListener) sb.addEventListener('click', openSet);
+  const scl = $('setClose'); if (scl && scl.addEventListener) scl.addEventListener('click', closeSet);
+  const ssnd = $('setSound'); if (ssnd && ssnd.addEventListener) ssnd.addEventListener('click', toggleSound);
+  const svib = $('setVibrate'); if (svib && svib.addEventListener) svib.addEventListener('click', toggleVibrate);
+  const sbig = $('setBig'); if (sbig && sbig.addEventListener) sbig.addEventListener('click', toggleBig);
+  const shelp = $('setHelp'); if (shelp && shelp.addEventListener) shelp.addEventListener('click', function () { closeSet(); showHelp(); });
+  const sins = $('setInstall'); if (sins && sins.addEventListener) sins.addEventListener('click', promptInstall);
   const hb = $('helpBtn'); if (hb && hb.addEventListener) hb.addEventListener('click', showHelp);
   const hc = $('helpClose'); if (hc && hc.addEventListener) hc.addEventListener('click', hideHelp);
   firstRunPending = !getSeenHelp();
@@ -1778,6 +2342,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const nd = $('coachNudge'); if (nd && nd.addEventListener) nd.addEventListener('click', function () { setCoach(true); });
   const on = $('overNew'); if (on && on.addEventListener) on.addEventListener('click', restartSame);
   const och = $('overChallenge'); if (och && och.addEventListener) och.addEventListener('click', shareChallenge);
+  const osc = $('overShareCard'); if (osc && osc.addEventListener) osc.addEventListener('click', openShareCard);
+  const orp = $('overReplay'); if (orp && orp.addEventListener) orp.addEventListener('click', openReplay);
+  const scc = $('shareCardClose'); if (scc && scc.addEventListener) scc.addEventListener('click', closeShareCard);
+  const scs = $('shareCardSave'); if (scs && scs.addEventListener) scs.addEventListener('click', saveShareCard);
+  const sccp = $('shareCardCopy'); if (sccp && sccp.addEventListener) sccp.addEventListener('click', copyShareText);
+  const rpc = $('replayClose'); if (rpc && rpc.addEventListener) rpc.addEventListener('click', closeReplay);
+  const rpp = $('replayPrev'); if (rpp && rpp.addEventListener) rpp.addEventListener('click', function () { replayGo(-1); });
+  const rpn = $('replayNext'); if (rpn && rpn.addEventListener) rpn.addEventListener('click', function () { replayGo(1); });
+  const rpj = $('replayJump'); if (rpj && rpj.addEventListener) rpj.addEventListener('click', replayJumpMiss);
+  const ts = $('todayStats');
+  if (ts && ts.addEventListener) {
+    ts.addEventListener('click', openTrend);
+    ts.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTrend(); } });
+  }
+  const tc = $('trendClose'); if (tc && tc.addEventListener) tc.addEventListener('click', closeTrend);
   // 复盘导出按钮是 overBody 动态生成的 → 用事件委托绑在静态的 overBody 上
   const ob = $('overBody');
   if (ob && ob.addEventListener) ob.addEventListener('click', function (e) {
@@ -1806,6 +2385,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const an = $('askDiffNever'); if (an && an.addEventListener) an.addEventListener('change', () => setAskDiff(!an.checked));
   const sg = $('startGo'); if (sg && sg.addEventListener) sg.addEventListener('click', beginFromStart);
   const sh = $('startHelp'); if (sh && sh.addEventListener) sh.addEventListener('click', showHelp);
+  const sst = $('startSet'); if (sst && sst.addEventListener) sst.addEventListener('click', openSet);
   // ① ② ③ 新功能按钮
   const st = $('startToday'); if (st && st.addEventListener) st.addEventListener('click', startToday);
   const ss = $('startSpectate'); if (ss && ss.addEventListener) ss.addEventListener('click', startSpectate);

@@ -426,11 +426,13 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   padding: calc(env(safe-area-inset-top) + 20px) 22px calc(env(safe-area-inset-bottom) + 20px);
   background: radial-gradient(120% 70% at 50% 0%, #1e5230 0%, #14361f 55%, #0a1d10 100%) #14361f;
+  overflow-y: auto;
 }
 #startScreen.hidden { display: none; }
 .ss-inner {
   width: 100%; max-width: 340px;
   display: flex; flex-direction: column; align-items: center; text-align: center;
+  margin: auto;
 }
 .ss-logo {
   font-family: "Songti SC", "STSong", SimSun, "Noto Serif SC", Georgia, serif;
@@ -479,6 +481,8 @@ html, body {
   color: #c9c2a6; font-size: 15px;
   text-decoration: underline; text-underline-offset: 4px;
 }
+.ss-links { display: flex; justify-content: center; align-items: center; gap: 18px; margin-top: 12px; }
+.ss-links .ss-help { margin-top: 0; }
 #visitStatStart { margin-top: 14px; font-size: 12px; color: rgba(201, 194, 166, .72); }
 .ss-foot { margin-top: 6px; font-size: 12px; letter-spacing: 0.1em; color: #7f947f; }
 
@@ -628,5 +632,88 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .card.in-table, .npc-show-cards .card, #npcArea .avatar, #overModal .box, #achvModal .box, #confetti .cf { animation: none !important; }
 }
+
+/* ==================================================================
+   设置 / 同牌战绩 / 战报卡 / 复盘回放
+   ================================================================== */
+.ss-today-stats {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; margin-top: 7px; padding: 7px 10px;
+  border-radius: 10px; cursor: pointer;
+  background: rgba(255, 255, 255, .04); border: 1px solid rgba(217, 180, 90, .18);
+  color: #c9c2a6; font-size: 13px; letter-spacing: .02em;
+}
+.ss-today-stats:active { transform: scale(.985); }
+.ss-trend-go { color: #f0dfae; font-weight: 700; white-space: nowrap; }
+
+/* 设置 */
+.set-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 4px; font-size: 16px; color: #e8efe8;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+}
+.set-row .toggle {
+  min-width: 58px; padding: 7px 16px; border-radius: 10px;
+  border: 1px solid #555; background: #2b2b2b; color: #ccc;
+  font-size: 15px; font-weight: 700;
+}
+.set-row .toggle.on { background: #2f9e44; color: #fff; border-color: #ffd43b; box-shadow: 0 0 0 2px #ffd43b55; }
+.set-note { font-size: 12.5px; line-height: 1.5; color: #9fb89f; margin: 10px 4px 0; }
+/* 标题画面在最上层（z 400），从这里打开的设置/战绩必须盖住它 */
+#setModal, #trendModal { z-index: 500; }
+
+/* 同牌战绩 */
+.trend-summary { text-align: center; font-size: 15px; line-height: 1.7; color: #cfe3cf; margin: 4px 0 10px; }
+.trend-summary b { color: #ffe08a; font-size: 18px; }
+.trend-sub { font-size: 12px; color: #8fae90; }
+.trend-chart { background: #141b16; border-radius: 12px; padding: 8px 6px 2px; margin: 6px 0 10px; }
+.trend-chart svg { display: block; width: 100%; height: auto; }
+.trend-axis { stroke: rgba(255, 255, 255, .18); stroke-width: 1; }
+.trend-line { fill: none; stroke: #ffd43b; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.trend-area { fill: rgba(255, 212, 59, .12); stroke: none; }
+.trend-dot { fill: #ffd43b; }
+.trend-dot.last { fill: #fff; stroke: #ffd43b; stroke-width: 2; }
+.trend-txt { fill: #8fae90; font-size: 9px; }
+.trend-list { display: flex; flex-direction: column; gap: 4px; }
+.trend-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 5px 8px; border-radius: 8px; background: #16201a;
+  font-size: 13.5px; color: #9fb89f;
+}
+.trend-row b { color: #ffe08a; font-size: 16px; margin-left: auto; }
+.trend-unit { color: #7f947f; font-size: 12px; }
+.trend-empty { text-align: center; padding: 18px 6px; color: #8fae90; font-size: 13.5px; }
+
+/* 战报卡 */
+.share-card-preview { border-radius: 12px; overflow: hidden; background: #0a1d10; }
+.share-card-preview img { display: block; width: 100%; height: auto; }
+.share-tip { text-align: center; font-size: 12.5px; color: #9fb89f; margin: 8px 0 0; }
+.share-card-actions { display: flex; gap: 8px; margin-top: 10px; }
+.share-card-actions .go { flex: 1; margin-top: 0; }
+
+/* 复盘回放 */
+.replay-box { max-height: 92dvh; }
+.replay-stage { background: #141b16; border-radius: 12px; padding: 10px; }
+.rp-scores { text-align: center; font-size: 15px; color: #cfe3cf; margin-bottom: 6px; }
+.rp-scores b { color: #ffe08a; font-size: 20px; }
+.rp-scores b:last-child { color: #9fd0ff; }
+.rp-sec { font-size: 11.5px; color: #7f947f; letter-spacing: .08em; margin: 8px 0 4px; }
+.rp-cards { display: flex; flex-wrap: wrap; gap: 4px; }
+.replay-stage .card { --card-h: 48px; }
+.rp-counts { margin-top: 8px; font-size: 11.5px; color: #8fae90; }
+.replay-note { min-height: 38px; margin: 8px 2px; font-size: 13.5px; line-height: 1.5; color: #cfe3cf; text-align: center; }
+.rp-miss { color: #ffb3ad; font-weight: 700; }
+.replay-nav { display: flex; align-items: center; gap: 8px; }
+.replay-nav .go { margin-top: 0; flex: 1; padding: 10px 6px; font-size: 15px; }
+.replay-idx { flex: 0 0 auto; font-size: 13px; color: #9fb89f; min-width: 56px; text-align: center; }
+#replayJump { margin-top: 10px; }
+#replayModal .box h2 { margin-bottom: 8px; }
+
+/* 大字模式：放大牌面与关键文字，不破坏布局 */
+body.big .card { --card-h: clamp(84px, 23vmin, 112px); }
+body.big #tableArea .msg { font-size: 16px; }
+body.big #npcArea .npc-meta, body.big #myArea .my-meta { font-size: 16px; }
+body.big #topbar .score { font-size: 16px; }
+body.big .coach-b, body.big .coach-row, body.big .help-body { font-size: 16px; }
 
 

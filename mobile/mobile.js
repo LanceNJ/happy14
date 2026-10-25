@@ -4,15 +4,19 @@ const G = (typeof require !== 'undefined') ? require('./game-core.js') : window.
 const A = (typeof require !== 'undefined') ? require('./advisor.js') : (window.ADVISOR || null);
 const SFX = (typeof require !== 'undefined') ? require('./sfx.js') : (window.SFX || null);
 
-// ---------- 设置（音效 / 震动 / 大字） ----------
+// ---------- 设置（音效 / 震动 / 大字 / 牌副数） ----------
 const SET_MUTED = 'h14_muted';
 const SET_VIB = 'h14_vibrate';
 const SET_BIG = 'h14_big';
+const SET_DECKS = 'h14_decks';
+let decksPref = 2; // 1=快局(1副) 2=标准(2副)，仅影响普通随机局
 let muted = false;
 let vibrateOn = true;
 let bigMode = false;
 function readSet(k, dflt) { try { const v = localStorage.getItem(k); return v == null ? dflt : v === '1'; } catch (e) { return dflt; } }
 function writeSet(k, v) { try { if (typeof localStorage !== 'undefined') localStorage.setItem(k, v ? '1' : '0'); } catch (e) {} }
+function readNum(k, dflt) { try { const v = parseInt(localStorage.getItem(k), 10); return (v === 1 || v === 2) ? v : dflt; } catch (e) { return dflt; } }
+function writeNum(k, v) { try { if (typeof localStorage !== 'undefined') localStorage.setItem(k, String(v)); } catch (e) {} }
 function applyBigMode() {
   try { if (typeof document !== 'undefined' && document.body && document.body.classList) document.body.classList.toggle('big', bigMode); } catch (e) {}
 }
@@ -20,6 +24,7 @@ function loadSettings() {
   muted = readSet(SET_MUTED, false);
   vibrateOn = readSet(SET_VIB, true);
   bigMode = readSet(SET_BIG, false);
+  decksPref = readNum(SET_DECKS, 2);
   applyBigMode();
 }
 function buzz(pattern) {
@@ -357,6 +362,7 @@ function saveReplayRecord(ps, ns, hasNewGame) {
     ts: new Date().toISOString(),
     seed: currentSeed >>> 0,
     diff: npcDifficulty,
+    numDecks: state.numDecks,
     firstRandom: !!firstMoveRandom,
     actions: replayActions.slice(),
     ps: Math.round(ps * 100) / 100,
@@ -441,7 +447,7 @@ function makeReplayFrames(rec) {
   const frames = [];
   let st;
   try {
-    st = G.createGame({ numDecks: 2, firstRandom: rec.firstRandom !== false, rng: mulberry32(rec.seed >>> 0) });
+    st = G.createGame({ numDecks: (rec.numDecks || 2), firstRandom: rec.firstRandom !== false, rng: mulberry32(rec.seed >>> 0) });
   } catch (e) { return frames; }
   const missByDec = {};
   (rec.misses || []).forEach((m) => { if (typeof m.dec === 'number' && missByDec[m.dec] == null) missByDec[m.dec] = m; });
@@ -1156,8 +1162,21 @@ function updateSetUI() {
   setToggle('setSound', !muted);
   setToggle('setVibrate', vibrateOn);
   setToggle('setBig', bigMode);
+  const seg = $('setDecksSeg');
+  if (seg && seg.querySelectorAll) {
+    seg.querySelectorAll('.seg-btn').forEach((b) => {
+      const on = parseInt(b.getAttribute('data-decks'), 10) === decksPref;
+      b.classList.toggle('on', on);
+    });
+  }
   const ib = $('setInstall');
   if (ib) ib.style.display = deferredInstall ? 'block' : 'none';
+}
+function setDecks(n) {
+  decksPref = (n === 1) ? 1 : 2;
+  writeNum(SET_DECKS, decksPref);
+  updateSetUI();
+  snd('tap');
 }
 function openSet() {
   const m = $('setModal');
@@ -1205,9 +1224,11 @@ function promptInstall() {
     const seed = parseInt(raw, 10);
     if (!isFinite(seed)) return;
     const d = q.get('d');
+    const n = parseInt(q.get('n'), 10);
     challenge = {
       s: seed >>> 0,
       d: (d && DIFF_DESC[d]) ? d : 'medium',
+      n: (n === 1 || n === 2) ? n : 2,
       score: parseFloat(q.get('score')),
     };
   } catch (e) { /* file:// 等环境读不到 search 就当普通开局 */ }
@@ -1224,9 +1245,12 @@ function newGame() {
   if (useChallenge) challengeUsed = true;
   isTodayGame = !useChallenge && todayMode;
   currentSeed = useChallenge ? challenge.s : (isTodayGame ? todaySeed() : ((Math.random() * 0xffffffff) >>> 0));
+  // 牌副数：挑战局用链接携带的 n（保证朋友同牌）；同牌比一比固定 2 副（日赛标准局）；
+  // 普通随机局才用用户的快局/标准偏好，让用户自行控制一局时长。
+  const numDecks = useChallenge ? (challenge.n || 2) : (isTodayGame ? 2 : decksPref);
   // 一律走种子发牌：普通局也记下种子，回放才能重建同一副牌
   const rng = mulberry32(currentSeed >>> 0);
-  state = G.createGame({ numDecks: 2, firstRandom: firstMoveRandom, rng: rng });
+  state = G.createGame({ numDecks: numDecks, firstRandom: firstMoveRandom, rng: rng });
   episode++;
   ui.selHand = []; ui.selTable = null; ui.noMoves = false; ui.mergePlan = null; ui.penPlan = null;
   ui.mode = 'idle'; ui.valid = false; snap = null;
@@ -1817,7 +1841,7 @@ function buildChallengeLink() {
   const base = (location.origin && location.origin !== 'null' && /https?:/.test(location.origin))
     ? location.origin + location.pathname
     : 'https://h14-mobile-98661.app.workbuddy.host/';
-  return base + '?s=' + currentSeed + '&d=' + npcDifficulty + '&score=' + G.computeScore(state, 'player').toFixed(2);
+  return base + '?s=' + currentSeed + '&d=' + npcDifficulty + '&n=' + (state.numDecks || 2) + '&score=' + G.computeScore(state, 'player').toFixed(2);
 }
 function shareChallenge() {
   const ps = G.computeScore(state, 'player');
@@ -2331,6 +2355,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const ssnd = $('setSound'); if (ssnd && ssnd.addEventListener) ssnd.addEventListener('click', toggleSound);
   const svib = $('setVibrate'); if (svib && svib.addEventListener) svib.addEventListener('click', toggleVibrate);
   const sbig = $('setBig'); if (sbig && sbig.addEventListener) sbig.addEventListener('click', toggleBig);
+  const seg = $('setDecksSeg');
+  if (seg && seg.querySelectorAll) {
+    seg.querySelectorAll('.seg-btn').forEach((b) => {
+      if (b.addEventListener) b.addEventListener('click', function () { setDecks(parseInt(b.getAttribute('data-decks'), 10)); });
+    });
+  }
   const shelp = $('setHelp'); if (shelp && shelp.addEventListener) shelp.addEventListener('click', function () { closeSet(); showHelp(); });
   const sins = $('setInstall'); if (sins && sins.addEventListener) sins.addEventListener('click', promptInstall);
   const hb = $('helpBtn'); if (hb && hb.addEventListener) hb.addEventListener('click', showHelp);

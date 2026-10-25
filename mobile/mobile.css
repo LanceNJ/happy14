@@ -666,6 +666,14 @@ html, body {
 }
 .set-row .toggle.on { background: #2f9e44; color: #fff; border-color: #ffd43b; box-shadow: 0 0 0 2px #ffd43b55; }
 .set-note { font-size: 12.5px; line-height: 1.5; color: #9fb89f; margin: 10px 4px 0; }
+/* 牌副数分段控件 */
+.set-row-seg { flex-wrap: wrap; }
+.set-seg { display: inline-flex; gap: 6px; }
+.set-seg .seg-btn {
+  padding: 7px 14px; border-radius: 10px; border: 1px solid #555;
+  background: #2b2b2b; color: #ccc; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.set-seg .seg-btn.on { background: #2f9e44; color: #fff; border-color: #ffd43b; box-shadow: 0 0 0 2px #ffd43b55; }
 /* 标题画面在最上层（z 400），从这里打开的设置/战绩必须盖住它 */
 #setModal, #trendModal { z-index: 500; }
 
